@@ -40,6 +40,7 @@ proj_summary = proj_df[['region', 'projection_density']].groupby(['region']).mea
 
 # Get percentage of modulated neurons
 light_neurons = pd.read_csv(join(data_path, 'light_modulated_neurons.csv'))
+light_neurons['abs_mod_index'] = np.abs(light_neurons['mod_index'])
 subjects = load_subjects()
 for i, nickname in enumerate(np.unique(subjects['subject'])):
     light_neurons.loc[light_neurons['subject'] == nickname, 'sert-cre'] = subjects.loc[subjects['subject'] == nickname, 'sert-cre'].values[0]
@@ -47,6 +48,8 @@ summary_df = light_neurons[light_neurons['sert-cre'] == 1].groupby(['region']).s
 summary_df = summary_df.rename(columns={0: 'n_neurons'})
 summary_df['modulation_index'] = light_neurons[light_neurons['sert-cre'] == 1].groupby(
     ['region']).mean(numeric_only=True)['mod_index']
+summary_df['abs_modulation_index'] = light_neurons[light_neurons['sert-cre'] == 1].groupby(
+    ['region']).mean(numeric_only=True)['abs_mod_index']
 summary_df['latency'] = light_neurons[light_neurons['sert-cre'] == 1].groupby(
     ['region']).median(numeric_only=True)['latenzy']
 summary_df['modulated'] = light_neurons[light_neurons['sert-cre'] == 1].groupby(
@@ -251,6 +254,42 @@ plt.savefig(join(fig_path, '5HT1b_map.pdf'))
 # %%
 
 CMAP = 'magma'
+
+# Plot brain map slices
+f, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(6, 4), dpi=600)
+
+plot_scalar_on_slice(summary_df['region'].values, summary_df['abs_modulation_index'].values, ax=ax1,
+                     slice='coronal', coord=AP[0]*1000, brain_atlas=ba, cmap=CMAP, clevels=[0.05, 0.2])
+ax1.axis('off')
+ax1.set(title=f'+{np.abs(AP[0])} mm AP')
+
+plot_scalar_on_slice(summary_df['region'].values, summary_df['abs_modulation_index'].values, ax=ax2,
+                     slice='coronal', coord=AP[1]*1000, brain_atlas=ba, cmap=CMAP, clevels=[0.05, 0.2])
+ax2.axis('off')
+ax2.set(title=f'-{np.abs(AP[1])} mm AP')
+
+plot_scalar_on_slice(summary_df['region'].values, summary_df['abs_modulation_index'].values, ax=ax3,
+                     slice='coronal', coord=AP[2]*1000, brain_atlas=ba, cmap=CMAP, clevels=[0.05, 0.2])
+ax3.axis('off')
+ax3.set(title=f'-{np.abs(AP[2])} mm AP')
+
+sns.despine()
+
+f.subplots_adjust(right=0.85)
+# lower left corner in [0.88, 0.3]
+# axes width 0.02 and height 0.4
+cb_ax = f.add_axes([0.88, 0.42, 0.01, 0.3])
+cbar = f.colorbar(mappable=ax1.images[0], cax=cb_ax)
+cbar.ax.set_ylabel('Modulation strength', rotation=270, labelpad=10)
+cbar.ax.set_yticks([0.05, 0.1, 0.15, 0.2])
+cbar.ax.set_yticklabels([0.05, 0.1, 0.15, 0.2])
+
+plt.savefig(join(fig_path, 'abs_mod_index_map.pdf'))
+
+
+# %%
+
+CMAP = 'magma'
 MAX_C = 60
 C_TICKS = 20
 
@@ -315,7 +354,7 @@ f.subplots_adjust(right=0.85)
 # axes width 0.02 and height 0.4
 cb_ax = f.add_axes([0.88, 0.42, 0.01, 0.3])
 cbar = f.colorbar(mappable=ax1.images[0], cax=cb_ax)
-cbar.ax.set_ylabel('Modulation index', rotation=270, labelpad=16)
+cbar.ax.set_ylabel('Modulation directionality', rotation=270, labelpad=16)
 cbar.ax.set_yticks([-0.1, 0, 0.1])
 cbar.ax.set_yticklabels([-0.1, 0, 0.1])
 

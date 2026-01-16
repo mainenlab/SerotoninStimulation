@@ -10,23 +10,27 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from os.path import join, realpath, dirname, split
-from scipy.stats import pearsonr
-import math
 import statsmodels.api as sm
 import statsmodels.genmod.families.links as sm_links
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+from sklearn.model_selection import LeaveOneOut
 from sklearn.preprocessing import StandardScaler
-from stim_functions import paths, figure_style, load_subjects, combine_regions, remap
+from stim_functions import paths, figure_style, load_subjects, remap
 from iblatlas.atlas import AllenAtlas
 ba = AllenAtlas(res_um=25)
 colors, dpi = figure_style()
 
 # Settings
 TARGET_VARIABLE = 'latency'
+#TARGET_VARIABLE = 'abs_mod_index'
 #TARGET_VARIABLE = 'perc_mod'
 #TARGET_VARIABLE = 'mod_index'
-MIN_MOD_NEURONS = {'perc_mod': 0, 'mod_index': 15, 'latency': 15}
-MIN_NEURONS = {'perc_mod': 5, 'mod_index': 0, 'latency': 0}
+MIN_MOD_NEURONS = {'perc_mod': 0, 'mod_index': 15, 'abs_mod_index': 15, 'latency': 15}
+MIN_NEURONS = {'perc_mod': 5, 'mod_index': 0, 'abs_mod_index': 0, 'latency': 0}
 INCL_RECEPTORS = ['5-HT1a', '5-HT1b', '5-HT2a', '5-HT2c', '5-HT3a', '5-HT5a']
+#INCL_RECEPTORS = ['5-HT1a', '5-HT1b', '5-HT1d', '5-HT1f', '5-HT2a', '5-HT2b',
+#                  '5-HT2c', '5-HT3a', '5-HT3b', '5-HT5a', '5-HT7']
+DROP_PROJECTION = False
 
 # Paths
 f_path, data_path = paths()
@@ -41,16 +45,17 @@ expr_df = expr_df[np.isin(expr_df['receptor'], INCL_RECEPTORS)]
 expression_mean = expr_df[['region', 'receptor', 'expression_energy']].groupby(
     ['region', 'receptor']).median().reset_index()
 
-
 # load structure and expression data set
 proj_df = pd.read_csv(join(data_path, 'dr_projection_strength.csv'))
 proj_df = proj_df[~np.isin(proj_df['allen_acronym'], ['MMd', 'MMme', 'MMl', 'MMm', 'MMp', 'CUL4, 5'])]
 proj_df['region'] = remap(proj_df['allen_acronym'])
 #proj_df['region'] = combine_regions(remap(proj_df['allen_acronym']))
 proj_summary = proj_df[['region', 'projection_density']].groupby(['region']).mean().reset_index()
+proj_summary = proj_summary.rename(columns={'projection_density': 'projection'})
 
 # Load in neural data
 ephys_data = pd.read_csv(join(data_path, 'light_modulated_neurons.csv'))
+ephys_data['abs_mod_index'] = np.abs(ephys_data['mod_index'])
 #ephys_data['region'] = combine_regions(ephys_data['region'])
 subjects = load_subjects()
 for i, nickname in enumerate(np.unique(subjects['subject'])):
@@ -66,6 +71,8 @@ ephys_summary = per_mouse_df[['region', 'perc_mod']].groupby('region').mean()
 # Calculate summary per neuron
 ephys_summary[['mod_index']] = ephys_data[(ephys_data['sert-cre'] == 1) & (ephys_data['modulated'] == 1)][[
     'region', 'mod_index']].groupby('region').mean()[['mod_index']]
+ephys_summary[['abs_mod_index']] = ephys_data[(ephys_data['sert-cre'] == 1) & (ephys_data['modulated'] == 1)][[
+    'region', 'abs_mod_index']].groupby('region').mean()[['abs_mod_index']]
 ephys_summary[['latenzy']] = ephys_data[(ephys_data['sert-cre'] == 1) & (ephys_data['modulated'] == 1)][[
     'region', 'latenzy']].groupby('region').mean()[['latenzy']]
 ephys_summary = ephys_summary.rename(columns={'latenzy': 'latency'})
@@ -87,52 +94,26 @@ ephys_summary = ephys_summary[~np.isin(ephys_summary['region'], ['root'])]
 # %%
 print("--- Starting GLM Analysis ---")
 
-# 1. Reshape receptor expression data to wide format
-print("Pivoting receptor expression data...")
-try:
-    expression_wide = expression_mean.pivot(
-        index='region',
-        columns='receptor',
-        values='expression_energy'
-    )
+# Reshape receptor expression data to wide format
+expression_wide = expression_mean.pivot(
+    index='region',
+    columns='receptor',
+    values='expression_energy'
+)
 
-    expression_wide.columns.name = None
-    expression_wide = expression_wide.reset_index()
-except ValueError as e:
-    print(f"Error pivoting data: {e}")
-    print("Attempting aggregation before pivot...")
-    expression_mean_agg = expression_mean.groupby(['region', 'receptor'])['expression_energy'].mean().reset_index()
-    expression_wide = expression_mean_agg.pivot(
-        index='region',
-        columns='receptor',
-        values='expression_energy'
-    )
-    expression_wide.columns.name = None
-    expression_wide = expression_wide.reset_index()
+expression_wide.columns.name = None
+expression_wide = expression_wide.reset_index()
 
-
-# 2. Merge all data sources into a single DataFrame
-
-print("Merging data sources...")
+# Merge all data sources into a single DataFrame
 
 if TARGET_VARIABLE == 'mod_index':
-    # Ensure mod_index is present
-    if 'mod_index' not in ephys_summary.columns:
-        print("Critical Error: 'mod_index' not found in ephys_summary.")
-        # Stop execution or raise error
     model_df = ephys_summary[['region', 'mod_index']]
+elif TARGET_VARIABLE == 'abs_mod_index':
+    model_df = ephys_summary[['region', 'abs_mod_index']]
 elif TARGET_VARIABLE == 'perc_mod':
-    # Ensure count columns are present for Binomial GLM
-    if 'modulated' not in ephys_summary.columns or 'n_neurons' not in ephys_summary.columns:
-        print("Critical Error: 'modulated' or 'n_neurons' counts not found in ephys_summary.")
-        # Stop execution or raise error
     #model_df = ephys_summary[['region', 'perc_mod']]
     model_df = ephys_summary[['region', 'modulated', 'n_neurons']]
 elif TARGET_VARIABLE == 'latency':
-    # Ensure latency is present
-    if 'latency' not in ephys_summary.columns:
-        print("Critical Error: 'latency' not found in ephys_summary.")
-        # Stop execution or raise error
     model_df = ephys_summary[['region', 'latency']]
 else:
     raise ValueError(f"Unknown TARGET_VARIABLE: '{TARGET_VARIABLE}'")
@@ -145,162 +126,191 @@ model_df = pd.merge(model_df, expression_wide, on='region', how='inner')
 
 print(f"Final merged DataFrame shape: {model_df.shape}")
 
-# 3. Prepare data for the model
+# Prepare data for the model
 model_df_clean = model_df.dropna()
 model_df_clean = model_df_clean.set_index('region') # Use region as index, not a predictor
-if model_df_clean.empty:
-    print("\nCritical Error: No overlapping regions found after merging.")
-    print("Cannot build model. Check region names for consistency across files.")
 
-# --- MODIFIED SECTION: Reverted to Full GLM (No PCA) ---
+# Define Target (y) and Predictors (X)
+if TARGET_VARIABLE == 'perc_mod':
+    # For Binomial GLM, y is [successes, totals]
+    y = model_df_clean[['modulated', 'n_neurons']]
+    X_full = model_df_clean.drop(columns=['modulated', 'n_neurons'])
+
+    #y = model_df_clean[['perc_mod']]
+    #X_full = model_df_clean.drop(columns=['perc_mod'])
 else:
-    # 4. Define Target (y) and Predictors (X)
+    y = model_df_clean[TARGET_VARIABLE]
+    X_full = model_df_clean.drop(columns=[TARGET_VARIABLE])
 
-    if TARGET_VARIABLE == 'mod_index':
-        y = model_df_clean['mod_index']
-        X_full = model_df_clean.drop(columns=['mod_index'])
-    elif TARGET_VARIABLE == 'perc_mod':
-        # For Binomial GLM, y is [successes, totals]
-        y = model_df_clean[['modulated', 'n_neurons']]
-        X_full = model_df_clean.drop(columns=['modulated', 'n_neurons'])
+#X_full = X_full.drop(columns=X_full.columns.difference(['projection_density']))
 
-        #y = model_df_clean[['perc_mod']]
-        #X_full = model_df_clean.drop(columns=['perc_mod'])
-    elif TARGET_VARIABLE == 'latency':
-        y = model_df_clean['latency']
-        X_full = model_df_clean.drop(columns=['latency'])
+if DROP_PROJECTION:
+    X_full = X_full.drop(columns=['projection_density'])
 
-    #X_full = X_full.drop(columns=X_full.columns.difference(['projection_density']))
+n_obs = X_full.shape[0]
+n_pred = X_full.shape[1]
+print(f"\nFound {n_obs} observations (regions).")
+print(f"Found {n_pred} predictors.")
 
-    n_obs = X_full.shape[0]
-    n_pred = X_full.shape[1]
+# Standardize Predictors
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X_full)
 
-    print(f"\nFound {n_obs} observations (regions).")
-    print(f"Found {n_pred} predictors.")
+# Convert back to DataFrame to keep column names
+X_scaled = pd.DataFrame(X_scaled, columns=X_full.columns, index=X_full.index)
 
-    # 5. CRITICAL CHECK: N vs P
-    # We need N > P + 1 (for the intercept) to fit the model.
-    if n_obs <= n_pred + 1:
-        print("\n--- CRITICAL WARNING: Not Enough Data ---")
-        print(f"You have {n_obs} observations (regions) and {n_pred} predictors.")
-        print("To fit the full model, you MUST have more observations than predictors (N > P).")
-        print("The model will likely fail or produce unreliable 'Perfect Separation' warnings.")
-        print("Please re-run after increasing the number of brain regions in your data.")
+# Add a constant (intercept) to the model
+X_with_const = sm.add_constant(X_scaled)
 
-    else:
-        print("\nSufficient data found (N > P). Proceeding with GLM.")
+# Calculate VIF for each predictor
+vif_data = pd.DataFrame()
+vif_data["feature"] = X_with_const.columns
 
-        # 6. Standardize Predictors (Recommended)
-        print("Standardizing predictors (Z-scoring)...")
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X_full)
+vif_data["VIF"] = [variance_inflation_factor(X_with_const.values, i)
+                          for i in range(len(X_with_const.columns))]
 
-        # Convert back to DataFrame to keep column names
-        X_scaled = pd.DataFrame(X_scaled, columns=X_full.columns, index=X_full.index)
+print("\n--- Variance Inflation Factor (VIF) ---")
+print(vif_data[vif_data['feature'] != 'const']) # Hide the intercept VIF
 
-        # 7. Add a constant (intercept) to the model
-        X_with_const = sm.add_constant(X_scaled)
+# Define GLM families
+if (TARGET_VARIABLE == 'abs_mod_index') | (TARGET_VARIABLE == 'mod_index'):
+    glm_family = sm.families.Gaussian()
+elif TARGET_VARIABLE == 'perc_mod':
+    glm_family = sm.families.Binomial()
+    #glm_family = sm.families.Gamma(link=sm_links.log())
+elif TARGET_VARIABLE == 'latency':
+    # Using log link for Gamma is standard to ensure positive predictions
+    glm_family = sm.families.Gamma(link=sm_links.log())
 
-        # 8. Fit the GLM
+# Fit the GLM
+glm_model = sm.GLM(y, X_with_const, family=glm_family)
+results = glm_model.fit()
 
-        # --- MODIFIED: Select family based on target ---
-        if TARGET_VARIABLE == 'mod_index':
-            print("\nFitting Generalized Linear Model (Gaussian family)...")
-            # Using log link for Gamma is standard to ensure positive predictions
-            glm_family = sm.families.Gaussian()
-        elif TARGET_VARIABLE == 'perc_mod':
-            print("\nFitting Generalized Linear Model (Binomial family)...")
-            print(f"Target variable is {TARGET_VARIABLE} (using [modulated, n_neurons] counts)")
-            glm_family = sm.families.Binomial()
-            #glm_family = sm.families.Gamma(link=sm_links.log())
-        elif TARGET_VARIABLE == 'latency':
-            print("\nFitting Generalized Linear Model (Gamma family)...")
-            print(f"Target variable is {TARGET_VARIABLE} (using Gamma for positive, continuous duration)")
-            # Using log link for Gamma is standard to ensure positive predictions
-            glm_family = sm.families.Gamma(link=sm_links.log())
+# Print the results summary
+print("\n--- Full GLM Results Summary ---")
+print(results.summary())
 
-        glm_model = sm.GLM(y, X_with_const, family=glm_family)
-        results = glm_model.fit()
-        # --- END MODIFIED SECTION ---
+# Do leave-one-out cross validation
+loo = LeaveOneOut()
+loo_coefs = []
+y_true = []
+y_pred = []
+excluded_regions = [] # To store the name of the region left out
 
-        # 9. Print the results summary
-        print("\n--- Full GLM Results Summary ---")
-        print(results.summary())
+# Loop through each 'fold' (leaving one region out each time)
+for train_index, test_index in loo.split(X_with_const):
+    X_train, X_test = X_with_const.iloc[train_index], X_with_const.iloc[test_index]
+    y_train, y_test = y.iloc[train_index], y.iloc[test_index]
 
-        # Get params, CIs, and p-values
-        params = results.params
-        conf_int = results.conf_int()
-        pvalues = results.pvalues
+    # Get the name of the region being tested
+    region_name = X_with_const.index[test_index[0]]
 
-        # Combine into a DataFrame
-        plot_df = pd.DataFrame({
-            'coef': params,
-            'pvalue': pvalues
-        })
-        plot_df['ci_low'] = conf_int[0]
-        plot_df['ci_high'] = conf_int[1]
+    # Fit model on N-1 regions
+    try:
+        loo_results = sm.GLM(y_train, X_train, family=glm_family).fit()
 
-        # Drop the 'const' (intercept) row, we don't plot this
-        plot_df = plot_df.drop('const')
+        # Store coefficients with region name as index
+        coefs = loo_results.params.copy()
+        coefs['left_out_region'] = region_name
+        loo_coefs.append(coefs)
 
-        # Sort by coefficient value for a cleaner plot
-        plot_df = plot_df.sort_values('coef')
+        # Predict
+        pred = loo_results.predict(X_test)
 
-        # Rename
-        plot_df = plot_df.rename(index={'projection_density': "Projection"})
+        if TARGET_VARIABLE == 'perc_mod':
+            y_true.append(y_test.iloc[0, 0] / y_test.iloc[0, 1])
+        else:
+            y_true.append(y_test.values[0])
 
-        # Y-axis positions
-        y_pos = np.arange(len(plot_df))
+        y_pred.append(pred.values[0])
+        excluded_regions.append(region_name)
 
-        plt.figure(figsize=(2, 2.1), dpi=dpi)
+    except Exception as e:
+        print(f"Failed for region {region_name}: {e}")
+        continue
 
-        # Plot error bars (the CIs) and the center points
-        # Calculate error bar lengths from CI
-        # xerr = [ (coef - ci_low), (ci_high - coef) ]
-        x_err = [
-            plot_df['coef'] - plot_df['ci_low'],
-            plot_df['ci_high'] - plot_df['coef']
-        ]
+# Create a DataFrame for the coefficients
+loo_coef_df = pd.DataFrame(loo_coefs).set_index('left_out_region')
 
-        plt.errorbar(
-            x=plot_df['coef'],
-            y=y_pos,
-            xerr=x_err,
-            fmt='o', # 'o' plots the center point
-            capsize=3,
-            linestyle='None',
-            label='95% Confidence Interval',
-            color='b',
-            zorder=1
-        )
-        plt.axvline(x=0, color='grey', linestyle='--', lw=0.75, zorder=0)
+# Create a DataFrame for the predictions (useful for diagnosing the negative Q2)
+loo_pred_df = pd.DataFrame({
+    'region': excluded_regions,
+    'true_val': y_true,
+    'pred_val': y_pred,
+    'error': np.array(y_true) - np.array(y_pred)
+}).set_index('region')
 
-        if TARGET_VARIABLE == 'mod_index':
-            plt.xticks([-0.2, 0, 0.2], [-0.2, 0, 0.2])
-            plt.title('Modulation index')
-            star_x = 0.2
-        elif TARGET_VARIABLE == 'perc_mod':
-            plt.xticks([-0.4, 0, 0.4], [-0.4, 0, 0.4])
-            plt.title('Modulated neurons')
-            star_x = 0.45
-        elif TARGET_VARIABLE == 'latency':
-            plt.xticks([-0.3, 0, 0.3], [-0.3, 0, 0.3])
-            plt.title('Modulation latency (s)')
-            star_x = 0.3
+# %% Plot
+# Plotting the stability
+loo_df = pd.DataFrame(loo_coefs).drop(columns='const')
+f, ax1 = plt.subplots(figsize=(2, 2), dpi=dpi)
+sns.boxplot(data=loo_df, orient='h', color='skyblue', fliersize=0, ax=ax1)
+sns.stripplot(data=loo_df, orient='h', color='black', alpha=0.3, size=3, ax=ax1)
+ax1.axvline(x=0, color='red', linestyle='--')
 
-        # Add significance stars
-        for i in range(len(plot_df)):
-            if plot_df['pvalue'].iloc[i] < 0.05:
-                # Place star slightly to the right of the upper CI
-                plot_star_x = plot_df['ci_high'].iloc[i] + 0.02
-                plt.text(star_x, y_pos[i] - 0.25, '*',
-                         horizontalalignment='center', verticalalignment='center',
-                         fontweight='bold', color='k', fontsize=14)
+plt.tight_layout()
 
-        # Formatting
-        plt.yticks(y_pos, plot_df.index)
-        plt.xlabel('GLM coefficient')
+# Get params, CIs, and p-values
+params = results.params
+conf_int = results.conf_int()
+pvalues = results.pvalues
 
-        sns.despine(trim=True)
-        plt.tight_layout()
-        plt.savefig(join(fig_path, f'GLM_{TARGET_VARIABLE}.pdf'))
+# Combine into a DataFrame
+plot_df = pd.DataFrame({'coef': params, 'pvalue': pvalues})
+plot_df['ci_low'] = conf_int[0]
+plot_df['ci_high'] = conf_int[1]
+
+# Drop the 'const' (intercept) row, we don't plot this
+plot_df = plot_df.drop(['const', 'precision'], errors='ignore')
+
+# Sort by coefficient value for a cleaner plot
+plot_df = plot_df.sort_values('coef')
+
+# Rename
+plot_df = plot_df.rename(index={'projection_density': "Projection"})
+
+# Y-axis positions
+y_pos = np.arange(len(plot_df))
+
+f, ax1 = plt.subplots(figsize=(2, 2.1), dpi=dpi)
+
+# Plot error bars (the CIs) and the center points
+# Calculate error bar lengths from CI
+# xerr = [ (coef - ci_low), (ci_high - coef) ]
+x_err = [plot_df['coef'] - plot_df['ci_low'], plot_df['ci_high'] - plot_df['coef']]
+
+ax1.errorbar(x=plot_df['coef'], y=y_pos, xerr=x_err, fmt='o',
+             capsize=3, linestyle='None', label='95% Confidence Interval', color='b', zorder=1)
+ax1.axvline(x=0, color='grey', linestyle='--', lw=0.75, zorder=0)
+
+if TARGET_VARIABLE == 'mod_index':
+    ax1.set(xticks=[-0.2, 0, 0.2], xticklabels=[-0.2, 0, 0.2], title='Modulation directionality')
+    star_x = 0.2
+elif TARGET_VARIABLE == 'perc_mod':
+    ax1.set(xticks=[-0.4, 0, 0.4], xticklabels=[-0.4, 0, 0.4], title='Modulated neurons')
+    star_x = 0.45
+elif TARGET_VARIABLE == 'latency':
+    ax1.set(xticks=[-0.3, 0, 0.3], xticklabels=[-0.3, 0, 0.3], title='Modulation latency (s)')
+    star_x = 0.3
+elif TARGET_VARIABLE == 'abs_mod_index':
+    this_lim = 0.1
+    ax1.set(xticks=[-this_lim, 0, this_lim], xticklabels=[-this_lim, 0, this_lim],
+            title='Modulation strength')
+    star_x = this_lim + 0.02
+
+# Add significance stars
+for i in range(len(plot_df)):
+    if plot_df['pvalue'].iloc[i] < 0.05:
+        # Place star slightly to the right of the upper CI
+        plot_star_x = plot_df['ci_high'].iloc[i] + 0.02
+        ax1.text(star_x, y_pos[i] - 0.25, '*',
+                 horizontalalignment='center', verticalalignment='center',
+                 fontweight='bold', color='k', fontsize=14)
+
+# Formatting
+ax1.set_yticks(y_pos, plot_df.index)
+ax1.set_xlabel('GLM coefficient')
+
+sns.despine(trim=True)
+plt.tight_layout()
+plt.savefig(join(fig_path, f'GLM_{TARGET_VARIABLE}.pdf'))
