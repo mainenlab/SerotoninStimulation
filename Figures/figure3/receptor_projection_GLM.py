@@ -11,6 +11,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from os.path import join, realpath, dirname, split
 import statsmodels.api as sm
+from statsmodels.stats.multitest import multipletests
 import statsmodels.genmod.families.links as sm_links
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from sklearn.model_selection import LeaveOneOut
@@ -21,10 +22,10 @@ ba = AllenAtlas(res_um=25)
 colors, dpi = figure_style()
 
 # Settings
-TARGET_VARIABLE = 'latency'
+#TARGET_VARIABLE = 'latency'
 #TARGET_VARIABLE = 'abs_mod_index'
 #TARGET_VARIABLE = 'perc_mod'
-#TARGET_VARIABLE = 'mod_index'
+TARGET_VARIABLE = 'mod_index'
 MIN_MOD_NEURONS = {'perc_mod': 0, 'mod_index': 15, 'abs_mod_index': 15, 'latency': 15}
 MIN_NEURONS = {'perc_mod': 5, 'mod_index': 0, 'abs_mod_index': 0, 'latency': 0}
 INCL_RECEPTORS = ['5-HT1a', '5-HT1b', '5-HT2a', '5-HT2c', '5-HT3a', '5-HT5a']
@@ -241,19 +242,11 @@ loo_pred_df = pd.DataFrame({
 }).set_index('region')
 
 # %% Plot
-# Plotting the stability
-loo_df = pd.DataFrame(loo_coefs).drop(columns='const')
-f, ax1 = plt.subplots(figsize=(2, 2), dpi=dpi)
-sns.boxplot(data=loo_df, orient='h', color='skyblue', fliersize=0, ax=ax1)
-sns.stripplot(data=loo_df, orient='h', color='black', alpha=0.3, size=3, ax=ax1)
-ax1.axvline(x=0, color='red', linestyle='--')
-
-plt.tight_layout()
-
 # Get params, CIs, and p-values
 params = results.params
 conf_int = results.conf_int()
 pvalues = results.pvalues
+reject, pvals_corrected, _, _ = multipletests(pvalues.values, alpha=0.05, method='fdr_bh')
 
 # Combine into a DataFrame
 plot_df = pd.DataFrame({'coef': params, 'pvalue': pvalues})
@@ -266,8 +259,11 @@ plot_df = plot_df.drop(['const', 'precision'], errors='ignore')
 # Sort by coefficient value for a cleaner plot
 plot_df = plot_df.sort_values('coef')
 
+# Move projection to bottom
+plot_df = pd.concat([plot_df.loc[['projection'], :], plot_df.drop('projection', axis=0)], axis=0)
+
 # Rename
-plot_df = plot_df.rename(index={'projection_density': "Projection"})
+plot_df = plot_df.rename(index={'projection': "Projection"})
 
 # Y-axis positions
 y_pos = np.arange(len(plot_df))
@@ -284,19 +280,24 @@ ax1.errorbar(x=plot_df['coef'], y=y_pos, xerr=x_err, fmt='o',
 ax1.axvline(x=0, color='grey', linestyle='--', lw=0.75, zorder=0)
 
 if TARGET_VARIABLE == 'mod_index':
-    ax1.set(xticks=[-0.2, 0, 0.2], xticklabels=[-0.2, 0, 0.2], title='Modulation directionality')
     star_x = 0.2
+    x_lim = 0.2
+    x_loo_lim = 0.1
+    ax1.set(xticks=[-x_lim, 0, x_lim], xticklabels=[-x_lim, 0, x_lim], title='Modulation directionality')
 elif TARGET_VARIABLE == 'perc_mod':
-    ax1.set(xticks=[-0.4, 0, 0.4], xticklabels=[-0.4, 0, 0.4], title='Modulated neurons')
+    x_lim = 0.4
+    ax1.set(xticks=[-x_lim, 0, x_lim], xticklabels=[-x_lim, 0, x_lim], title='Modulated neurons')
     star_x = 0.45
 elif TARGET_VARIABLE == 'latency':
-    ax1.set(xticks=[-0.3, 0, 0.3], xticklabels=[-0.3, 0, 0.3], title='Modulation latency (s)')
+    x_lim = 0.3
+    x_loo_lim = 0.2
+    ax1.set(xticks=[-x_lim, 0, x_lim], xticklabels=[-x_lim, 0, x_lim], title='Modulation latency (s)')
     star_x = 0.3
 elif TARGET_VARIABLE == 'abs_mod_index':
-    this_lim = 0.1
-    ax1.set(xticks=[-this_lim, 0, this_lim], xticklabels=[-this_lim, 0, this_lim],
-            title='Modulation strength')
-    star_x = this_lim + 0.02
+    x_lim = 0.1
+    x_loo_lim = 0.07
+    ax1.set(xticks=[-x_lim, 0, x_lim], xticklabels=[-x_lim, 0, x_lim], title='Modulation strength')
+    star_x = x_lim + 0.02
 
 # Add significance stars
 for i in range(len(plot_df)):
@@ -314,3 +315,25 @@ ax1.set_xlabel('GLM coefficient')
 sns.despine(trim=True)
 plt.tight_layout()
 plt.savefig(join(fig_path, f'GLM_{TARGET_VARIABLE}.pdf'))
+
+# %%
+# Plotting the stability
+loo_df = pd.DataFrame(loo_coefs).drop(columns=['const'])
+loo_df = loo_df.rename(columns={'projection': "Projection"})
+loo_df = loo_df.loc[:, np.flip(plot_df.index)]
+
+f, ax1 = plt.subplots(figsize=(2, 2), dpi=dpi)
+#sns.boxplot(data=loo_df, orient='h', fliersize=0, ax=ax1, showmeans=True, zorder=2,
+#            meanprops={"marker": "|", "markeredgecolor": "red", "markersize": "8"},
+#            boxprops={'facecolor':'none', 'edgecolor':'none'}, medianprops={'color':'none'},
+#                     whiskerprops={'color':'none'}, capprops={'color':'none'})
+sns.stripplot(data=loo_df, orient='h', color='grey', size=2, ax=ax1, zorder=1)
+ax1.axvline(x=0, color='grey', linestyle='--', lw=0.5, zorder=0)
+ax1.set(xlabel='GLM coefficient', xticks=[-x_loo_lim, 0, x_loo_lim], xticklabels=[-x_loo_lim, 0, x_loo_lim])
+
+sns.despine(trim=True)
+plt.tight_layout()
+plt.savefig(join(fig_path, f'GLM_stability_{TARGET_VARIABLE}.pdf'))
+
+
+# %%
