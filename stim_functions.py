@@ -35,27 +35,41 @@ from one.api import ONE
 
 
 def init_one(local=False, open_one=True):
-    """
-    Initialize an instance of the ONE class with specified configuration.
-    Parameters:
-    local (bool): If True, initializes ONE in 'local' mode. Defaults to False, which sets the mode to 'auto'.
-    open_one (bool): If True, initializes ONE with a specific base URL and credentials for the Open Alyx instance. Defaults to False.
-    Returns:
-    ONE: An instance of the ONE class configured based on the provided parameters.
+    """Initialize an instance of the ONE class with specified configuration.
+
+    Parameters
+    ----------
+    local : bool, optional
+        If True, initializes ONE in 'local' mode. Defaults to False, which sets the mode to 'remote'.
+    open_one : bool, optional
+        If True, initializes ONE with a specific base URL and credentials for the Open Alyx
+        instance. Defaults to True.
+
+    Returns
+    -------
+    one.api.ONE
+        An instance of the ONE class configured based on the provided parameters.
     """
     if local:
         mode='local'
     else:
         mode='remote'
     if open_one:
-        one = ONE(mode=mode, base_url='https://openalyx.internationalbrainlab.org',
-                  password='international', silent=True)
+        return ONE(mode=mode, base_url='https://openalyx.internationalbrainlab.org',
+                   password='international', silent=True)
     else:
-        one = ONE(mode=mode)
-    return one
+        return ONE(mode=mode)
 
 
 def load_subjects():
+    """Load subject information from the subjects.csv file.
+
+    Returns
+    -------
+    pandas.DataFrame
+        DataFrame containing subject information with columns from the CSV file.
+        The 'subject_nr' column is cast to an integer.
+    """
     subjects = pd.read_csv(join(pathlib.Path(__file__).parent.resolve(), 'subjects.csv'),
                            delimiter=';|,', engine='python')
     subjects['subject_nr'] = subjects['subject_nr'].astype(int)
@@ -64,25 +78,26 @@ def load_subjects():
 
 
 def paths(save_dir='repo'):
-    """
-    Load in figure path from paths.json, if this file does not exist it will be generated from
-    user input
+    """Get paths for saving figures and data.
 
-    Save directory can be either the repository (for small files) or the one cache directory
-    (for large files)
+    Loads paths from 'paths.json'. If the file doesn't exist, it prompts the user for input
+    and creates it. The save directory can be specified to be within the repository
+    or the ONE cache directory.
 
-    Input
-    ------------------------
-    save_dir : str
-        'repo' or 'cache' for saving in the repository or one cache, respectively
+    Parameters
+    ----------
+    save_dir : {'repo', 'cache'}, optional
+        Specifies where to save data.
+        'repo': saves in the 'Data' directory within the repository (for small files).
+        'cache': saves in a 'serotonin' subdirectory of the ONE cache (for large files).
+        Defaults to 'repo'.
 
-    Output
-    ------------------------
+    Returns
+    -------
     fig_path : str
-        Path to where to save the figures
-
-    save_path : str
-        Path to where to save the output data
+        Path to where to save the figures.
+    save_path : str or pathlib.Path
+        Path to where to save the output data.
     """
     if not isfile(join(dirname(realpath(__file__)), 'paths.json')):
         path_dict = dict()
@@ -105,8 +120,17 @@ def paths(save_dir='repo'):
 
 
 def figure_style():
-    """
-    Set style for plotting figures
+    """Set a standard style for plotting figures.
+
+    This function configures seaborn and matplotlib to a standard style for this project.
+    It also defines a color palette for different brain regions, experimental conditions, etc.
+
+    Returns
+    -------
+    colors : dict
+        A dictionary of colors for plotting.
+    dpi : float
+        The dots per inch (DPI) for the screen, calculated based on screen width.
     """
     sns.set(style="ticks", context="paper",
             font="Arial",
@@ -195,24 +219,23 @@ def figure_style():
 
 
 def add_significance(x, p_values, ax, alpha=0.05):
-    """
-    Adds significance markers to a plot based on p-values.
-    This function identifies regions of significance in the provided p-values
-    and adds horizontal lines above the plot to indicate these regions.
-    Parameters:
-        x (array-like): The x-coordinates corresponding to the p-values.
-        p_values (array-like): The p-values to evaluate for significance.
-        ax (matplotlib.axes.Axes): The matplotlib Axes object to which the significance
-            markers will be added.
-        alpha (float, optional): The significance threshold. Default is 0.05.
-    Notes:
-        - The function assumes that `p_values` is a 1D array-like object.
-        - Horizontal lines are drawn above the plot to indicate regions where
-          p-values are below the significance threshold (`alpha`).
-        - The y-coordinate for the lines is determined based on the current
-          y-axis limits of the provided Axes object.
-    """
+    """Add significance markers (horizontal lines) to a plot.
 
+    This function identifies contiguous regions where `p_values < alpha` and
+    draws horizontal lines over these regions on the provided axes.
+
+    Parameters
+    ----------
+    x : array_like
+        The x-coordinates corresponding to the p-values.
+    p_values : array_like
+        The p-values to evaluate for significance.
+    ax : matplotlib.axes.Axes
+        The axes object to which the significance markers will be added.
+    alpha : float, optional
+        The significance threshold. P-values below this are considered significant.
+        Default is 0.05.
+    """
     p_sig = p_values < alpha
     start_end = np.where(np.concatenate(([0], np.diff(p_sig).astype(int))))[0]
     if p_sig[0] == True:
@@ -226,12 +249,38 @@ def add_significance(x, p_values, ax, alpha=0.05):
 
 
 def get_artifact_neurons():
+    """Load a dataframe of neurons that are considered artifacts.
+
+    Returns
+    -------
+    pandas.DataFrame
+        A DataFrame containing information about artifact neurons, loaded from
+        'artifact_neurons.csv'.
+    """
     artifact_neurons = pd.read_csv(
         join(pathlib.Path(__file__).parent.resolve(), 'artifact_neurons.csv'))
     return artifact_neurons
 
 
 def remove_artifact_neurons(df):
+    """Remove artifact neurons from a DataFrame.
+
+    This function loads a list of known artifact neurons from 'artifact_neurons.csv'
+    and removes them from the input DataFrame `df` by performing an outer merge
+    and keeping only the entries that are unique to the input DataFrame.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        A DataFrame containing neuron data. It must contain columns to identify
+        neurons, either ['pid', 'neuron_id', 'subject', 'probe', 'date'] or
+        ['subject', 'probe', 'date', 'neuron_id'].
+
+    Returns
+    -------
+    pandas.DataFrame
+        The input DataFrame with artifact neurons removed.
+    """
     artifact_neurons = pd.read_csv(
         join(pathlib.Path(__file__).parent.resolve(), 'artifact_neurons.csv'))
     for i, column in enumerate(df.columns):
@@ -247,20 +296,25 @@ def remove_artifact_neurons(df):
 
 
 def query_ephys_sessions(acronym=None, one=None):
-    """
-    Query ephys recordings from the database.
+    """Query ephys recording sessions from the database.
+
+    Queries for sessions that are part of the 'serotonin_inference' project,
+    have a session QC less than 50, and have an alignment count greater than 0.
+    It also filters to include only subjects listed in 'subjects.csv'.
 
     Parameters
     ----------
-    acronym : string, optional
-        Only return recordings that include the brain region with this Allen acronym
-    one : Initialized connection to the ONE database
+    acronym : str or list of str, optional
+        If provided, only returns sessions that have recordings in the brain region(s)
+        with the given Allen acronym(s). Defaults to None.
+    one : one.api.ONE, optional
+        An initialized ONE instance. If None, a new one is initialized.
 
     Returns
     -------
-    rec : DataFrame
-        A dataframe with the identifiers of all ephys recordings.
-
+    pandas.DataFrame
+        A DataFrame with identifiers for each matching ephys recording, with columns:
+        'pid', 'eid', 'probe', 'subject', 'date'.
     """
     if one is None:
         one = init_one()
@@ -296,26 +350,34 @@ def query_ephys_sessions(acronym=None, one=None):
 
 def remap(acronyms, source='Allen', dest='Beryl', combine=False, split_thalamus=False,
           abbreviate=True, brainregions=None):
-    """
-    Remap a list of brain region acronyms from one mapping source to another.
-    Parameters:
-        acronyms (list or array-like): A list of brain region acronyms to be remapped.
-        source (str, optional): The source mapping to use for remapping. Default is 'Allen'.
-        dest (str, optional): The destination mapping to remap to. Default is 'Beryl'.
-        combine (bool, optional): If True, combines remapped regions into broader categories.
-                                    Default is False.
-        split_thalamus (bool, optional): If True and `combine` is True, splits thalamus regions
-                                            into subcategories. Default is False.
-        abbreviate (bool, optional): If True and `combine` is True, abbreviates combined region names.
-                                        Default is True.
-        brainregions (BrainRegions, optional): An instance of the BrainRegions class to use for
-                                                remapping. If None, a new instance is created.
-                                                Default is None.
-    Returns:
-        list or array-like: The remapped acronyms. If `combine` is True, returns combined regions
-                            based on the specified options.
-    """
+    """Remap a list of brain region acronyms from one mapping to another.
 
+    Parameters
+    ----------
+    acronyms : list or array_like
+        A list of brain region acronyms to be remapped.
+    source : str, optional
+        The source mapping to use for remapping. Default is 'Allen'.
+    dest : str, optional
+        The destination mapping to remap to. Default is 'Beryl'.
+    combine : bool, optional
+        If True, combines remapped regions into broader categories using `combine_regions`.
+        Default is False.
+    split_thalamus : bool, optional
+        If True and `combine` is True, splits thalamus regions into subcategories.
+        Default is False.
+    abbreviate : bool, optional
+        If True and `combine` is True, abbreviates combined region names.
+        Default is True.
+    brainregions : iblatlas.regions.BrainRegions, optional
+        An instance of the BrainRegions class. If None, a new instance is created.
+        Default is None.
+
+    Returns
+    -------
+    numpy.ndarray
+        The remapped acronyms. If `combine` is True, returns combined region names.
+    """
     br = brainregions or BrainRegions()
     _, inds = ismember(br.acronym2id(acronyms), br.id[br.mappings[source]])
     remapped_acronyms = br.get(br.id[br.mappings[dest][inds]])['acronym']
@@ -326,8 +388,27 @@ def remap(acronyms, source='Allen', dest='Beryl', combine=False, split_thalamus=
 
 
 def combine_regions(acronyms, split_thalamus=False, abbreviate=True):
-    """
-    Combines regions into groups, input Beryl atlas acronyms: use remap function first
+    """Combine Beryl atlas acronyms into broader, functionally-defined region groups.
+
+    It is recommended to first remap acronyms to the Beryl atlas using the `remap` function.
+
+    Parameters
+    ----------
+    acronyms : array_like
+        An array of brain region acronyms (should be in Beryl mapping).
+    split_thalamus : bool, optional
+        If True, thalamic subregions are kept separate instead of being grouped into 'Thal.'.
+        Default is False.
+    abbreviate : bool, optional
+        If True, returns abbreviated region names (e.g., 'mPFC').
+        If False, returns full region names (e.g., 'Medial prefrontal cortex').
+        Default is True.
+
+    Returns
+    -------
+    numpy.ndarray
+        An array of the same length as `acronyms` containing the combined region names.
+        Regions not part of any group are labeled as 'root'.
     """
     regions = np.array(['root'] * len(acronyms), dtype=object)
     if abbreviate:
@@ -386,33 +467,31 @@ def combine_regions(acronyms, split_thalamus=False, abbreviate=True):
 
 
 def high_level_regions(acronyms, merge_cortex=False, only_vis=False, input_atlas='Allen'):
-    """
-    Maps brain region acronyms to high-level brain regions based on the specified atlas and options.
+    """Map brain region acronyms to high-level functional groups.
 
-    Parameters:
-    -----------
-    acronyms : list or array-like
+    This function first remaps acronyms to a standard set (if `input_atlas` is 'Allen'),
+    then combines them into first-level regions (e.g., 'mPFC', 'VIS'), and finally
+    groups them into high-level categories like 'Frontal cortex', 'Midbrain', etc.
+
+    Parameters
+    ----------
+    acronyms : list or array_like
         List of brain region acronyms to be mapped.
     merge_cortex : bool, optional
-        If True, merges specific cortical regions into a single 'Cortex' category.
+        If True, merges various cortical regions into a single 'Cortex' category.
         Default is False.
     only_vis : bool, optional
-        If True, maps only visual cortex regions when `merge_cortex` is False.
-        Default is False.
+        If True and `merge_cortex` is False, maps only 'VIS' to 'Visual cortex' and other
+        sensory areas are not grouped into 'Sensory cortex'. Default is False.
     input_atlas : str, optional
-        Specifies the input atlas to use for remapping. Default is 'Allen'.
+        The atlas of the input `acronyms`. If 'Allen', they will be remapped.
+        Default is False.
 
-    Returns:
-    --------
-    regions : numpy.ndarray
+    Returns
+    -------
+    numpy.ndarray
         Array of high-level brain region labels corresponding to the input acronyms.
-
-    Notes:
-    ------
-    - The function uses predefined mappings to group acronyms into broader brain region categories.
-    - If `merge_cortex` is True, regions like 'mPFC', 'OFC', 'M2', 'Pir', 'BC', and 'VIS' are grouped as 'Cortex'.
-    - If `merge_cortex` is False and `only_vis` is True, only 'VIS' is mapped to 'Visual cortex'.
-    - Specific mappings are applied for regions like 'Midbrain', 'Hippocampus', 'Thalamus', 'Amygdala', and 'Striatum'.
+        Regions not mapped are labeled 'root'.
     """
 
     if input_atlas == 'Allen':
@@ -439,22 +518,22 @@ def high_level_regions(acronyms, merge_cortex=False, only_vis=False, input_atlas
 
 
 def get_full_region_name(acronyms):
-    """
-    Retrieve the full region names corresponding to a list of brain region acronyms.
-    This function takes a list of acronyms and attempts to map each acronym to its
-    full region name using the BrainRegions class. If an acronym cannot be found,
-    it is returned as-is. If the input contains only one acronym, the function
-    returns a single string; otherwise, it returns a list of full region names.
-    Args:
-        acronyms (list of str): A list of brain region acronyms to be converted
-                                into full region names.
-    Returns:
-        str or list of str: The full region name corresponding to the acronym if
-                            the input is a single acronym, or a list of full region
-                            names if multiple acronyms are provided. If an acronym
-                            is not found, it is returned unchanged.
-    """
+    """Retrieve the full region names for a list of brain region acronyms.
 
+    This function maps each acronym to its full region name using the Allen Brain Atlas.
+    If an acronym cannot be found, it is returned as-is.
+
+    Parameters
+    ----------
+    acronyms : list of str
+        A list of brain region acronyms.
+
+    Returns
+    -------
+    str or list of str
+        If the input list contains a single acronym, returns its full name as a string.
+        Otherwise, returns a list of full region names.
+    """
     brainregions = BrainRegions()
     full_region_names = []
     for i, acronym in enumerate(acronyms):
@@ -470,18 +549,31 @@ def get_full_region_name(acronyms):
 
 
 def load_passive_opto_times(eid, one=None, freq=25):
-    """
-    Load in the time stamps of the optogenetic stimulation at the end of the recording, after the
-    taks and the spontaneous activity. Or when it's a long stimulation session with different
-    frequencies, only return those stimulation bouts of the specified Hz (default is 25 Hz).
+    """Load passive optogenetic stimulation times from pre-extracted files.
+
+    This function loads the timestamps of optogenetic stimulation trains and individual
+    pulses for a given session and stimulation frequency. It expects the files to be
+    pre-extracted and saved in a specific location.
+
+    Parameters
+    ----------
+    eid : str
+        The experiment ID of the session.
+    one : one.api.ONE, optional
+        An initialized ONE instance. If None, a new one is initialized. Used to get
+        session details.
+    freq : int, optional
+        The frequency of the stimulation to load. Defaults to 25 Hz.
 
     Returns
-    opto_train_times : 1D array
-        Timestamps of the start of each pulse train
-    opto_pulse_times : 1D array
-        Timestamps of all individual pulses
+    -------
+    opto_train_times : numpy.ndarray
+        Timestamps of the start of each pulse train. Returns an empty list if files
+        are not found.
+    opto_pulse_times : numpy.ndarray
+        Timestamps of all individual pulses. Returns an empty list if files
+        are not found.
     """
-
     if one is None:
         one = init_one()
     ses_details = one.get_details(eid)
@@ -501,49 +593,44 @@ def load_passive_opto_times(eid, one=None, freq=25):
 
 
 def load_trials(eid, laser_stimulation=False, invert_choice=False, invert_stimside=False, one=None):
-    """
-    Load and process trial data for a given experiment session.
-    Parameters:
-    -----------
+    """Load and process trial data for a given experiment session.
+
+    This function loads trial data from ONE and computes several additional
+    behavioral variables.
+
+    Parameters
+    ----------
     eid : str
         Experiment ID for the session to load.
     laser_stimulation : bool, optional
-        If True, includes laser stimulation data in the trials. Default is False.
+        If True, includes laser stimulation data in the trials DataFrame. Default is False.
     invert_choice : bool, optional
-        If True, inverts the choice values in the trials. Default is False.
+        If True, inverts the choice values (-1 becomes 1, 1 becomes -1). Default is False.
     invert_stimside : bool, optional
         If True, inverts the stimulus side and signed contrast values. Default is False.
-    one : ONE, optional
-        An instance of the ONE API to use for data loading. If None, a new instance is created.
-    Returns:
-    --------
+    one : one.api.ONE, optional
+        An instance of the ONE API. If None, a new instance is created.
+
+    Returns
+    -------
     pd.DataFrame or None
-        A pandas DataFrame containing processed trial data with the following columns:
-        - stimOn_times: Times when the stimulus was presented.
-        - feedback_times: Times when feedback was given.
-        - goCue_times: Times when the go cue was presented.
-        - probabilityLeft: Probability of the stimulus appearing on the left.
-        - contrastLeft: Contrast of the stimulus on the left.
-        - contrastRight: Contrast of the stimulus on the right.
-        - feedbackType: Feedback type (-1 for incorrect, 1 for correct).
-        - choice: Choice made by the subject (-1 for left, 1 for right).
-        - firstMovement_times: Times of the first movement.
-        - signed_contrast: Signed contrast of the stimulus (positive for right, negative for left).
-        - laser_stimulation: Laser stimulation data (if `laser_stimulation` is True).
-        - laser_probability: Probability of laser stimulation (if `laser_stimulation` is True).
-        - probe_trial: Indicator for probe trials (if `laser_stimulation` is True).
-        - correct: Binary indicator for correct trials (1 for correct, 0 for incorrect).
-        - right_choice: Binary indicator for rightward choices (1 for right, 0 for left).
-        - stim_side: Stimulus side (-1 for left, 1 for right).
-        - time_to_choice: Time from stimulus onset to choice.
-        - reaction_times: Reaction times (time from stimulus onset to first movement, if available).
-        Returns None if no trials are available for the given session.
-    Notes:
-    ------
+        A DataFrame containing processed trial data. Returns None if no trials are
+        found for the session. The DataFrame includes loaded data plus derived columns:
+        - 'signed_contrast': Contrast with sign indicating side.
+        - 'correct': 1 for correct, 0 for incorrect.
+        - 'right_choice': 1 for right choice, 0 for left.
+        - 'stim_side': -1 for left, 1 for right.
+        - 'time_to_choice': Time from stimulus onset to feedback.
+        - 'reaction_times': Time from stimulus onset to first movement.
+        If `laser_stimulation` is True, it also adds:
+        - 'laser_stimulation': 1 if laser was on, 0 otherwise.
+        - 'laser_probability': Probability of laser stimulation.
+        - 'probe_trial': Indicator for probe trials.
+
+    Notes
+    -----
     - If `laser_stimulation` is True and the laser probability dataset is unavailable,
       the function estimates the laser probability based on signed contrast and stimulation data.
-    - The `invert_choice` and `invert_stimside` parameters allow for flipping the choice and stimulus
-      side values, respectively, for specific experimental conditions.
     """
 
     one = one or ONE()
@@ -595,27 +682,28 @@ def load_trials(eid, laser_stimulation=False, invert_choice=False, invert_stimsi
 
 
 def get_neuron_qc(pid, one=None, ba=None, force_rerun=False):
-    """
-    Compute or load neuron quality control (QC) metrics for a given probe insertion.
-    Parameters:
-    -----------
+    """Compute or load neuron quality control (QC) metrics for a probe insertion.
+
+    This function calculates single-unit QC metrics using `brainbox.metrics.single_units.spike_sorting_metrics`.
+    If the metrics have already been computed and saved to a CSV file in the session's ALF
+    directory, it loads them from disk unless `force_rerun` is True.
+
+    Parameters
+    ----------
     pid : str
-        The probe insertion ID.
-    one : ONE, optional
-        An instance of the ONE API for data access. If not provided, a new instance will be created.
-    ba : BrainAtlas, optional
-        An instance of the BrainAtlas class for anatomical alignment. If not provided, no alignment is performed.
+        The probe insertion ID (e.g., '6c511e7c-add8-4833-8f55-9103813a21aa').
+    one : one.api.ONE, optional
+        An instance of the ONE API. If not provided, a new instance is created.
+    ba : iblatlas.atlas.AllenAtlas, optional
+        An instance of the AllenAtlas. If provided, it is used by the SpikeSortingLoader.
     force_rerun : bool, optional
-        If True, forces recalculation of QC metrics even if they are already saved on disk. Default is False.
-    Returns:
-    --------
+        If True, forces recalculation of QC metrics even if they are already saved.
+        Default is False.
+
+    Returns
+    -------
     pd.DataFrame
-        A DataFrame containing the neuron QC metrics.
-    Notes:
-    ------
-    - If QC metrics are already computed and saved on disk, they will be loaded unless `force_rerun` is set to True.
-    - QC metrics are saved to a CSV file in the session's ALF directory after computation.
-    - The function uses spike sorting data to calculate QC metrics, which include spike times, cluster IDs, amplitudes, and depths.
+        A DataFrame containing the neuron QC metrics for all clusters.
     """
 
     one = one or ONE()
@@ -646,34 +734,35 @@ def get_neuron_qc(pid, one=None, ba=None, force_rerun=False):
 
 
 def load_lfp(eid, probe, time_start, time_end, relative_to='begin', destriped=False, one=None):
-    """
-    Load a slice of local field potential (LFP) data for a specified time range.
-    Parameters:
-        eid (str): Experiment ID for the session to load data from.
-        probe (str): Name of the probe to load LFP data for.
-        time_start (float): Start time of the LFP slice in seconds.
-        time_end (float): End time of the LFP slice in seconds.
-        relative_to (str, optional): Reference point for the time range.
-            Options are 'begin' (default) or 'end'.
-        destriped (bool, optional): If True, load destriped LFP data.
-            Defaults to False.
-        one (ONE, optional): Instance of the ONE API for data access.
-            If None, a new instance is created.
-    Returns:
-        tuple:
-            - signal (numpy.ndarray): The LFP signal for the specified time range,
-              with shape (channels, time).
-            - time (numpy.ndarray): Array of time points corresponding to the LFP signal.
-    Raises:
-        ValueError: If the `relative_to` parameter is not 'begin' or 'end'.
-    Notes:
-        - If `destriped` is True, the function attempts to load pre-destriped LFP data
-          from a predefined path.
-        - If `destriped` is False, the function downloads the raw LFP data using the ONE API.
-        - The function uses the `spikeglx.Reader` to read the LFP data and extract the
-          specified time slice.
-    """
+    """Load a slice of local field potential (LFP) data for a specified time range.
 
+    Parameters
+    ----------
+    eid : str
+        Experiment ID for the session.
+    probe : str
+        Name of the probe (e.g., 'probe00').
+    time_start : float
+        Start time of the LFP slice in seconds.
+    time_end : float
+        End time of the LFP slice in seconds.
+    relative_to : {'begin', 'end'}, optional
+        Reference point for the time range. 'begin' means times are relative to the
+        start of the recording. 'end' means times are relative to the end.
+        Default is 'begin'.
+    destriped : bool, optional
+        If True, loads pre-destriped LFP data from a local cache. If False, downloads
+        the raw LFP data using ONE. Default is False.
+    one : one.api.ONE, optional
+        Instance of the ONE API. If None, a new instance is created.
+
+    Returns
+    -------
+    signal : numpy.ndarray
+        The LFP signal for the specified time range, with shape (n_channels, n_samples).
+    time : numpy.ndarray
+        Array of time points corresponding to the LFP signal samples.
+    """
     one = one or ONE()
     destriped_lfp_path = join(paths()[1], 'LFP')
 
@@ -709,24 +798,48 @@ def load_lfp(eid, probe, time_start, time_end, relative_to='begin', destriped=Fa
 def plot_scalar_on_slice(
         regions, values, coord=-1000, slice='coronal', mapping='Beryl', hemisphere='left',
         cmap='viridis', background='boundary', clevels=None, brain_atlas=None, colorbar=False, ax=None):
-    """
-    Function to plot scalar value per allen region on histology slice
-    :param regions: array of acronyms of Allen regions
-    :param values: array of scalar value per acronym. If hemisphere is 'both' and different values want to be shown on each
-    hemispheres, values should contain 2 columns, 1st column for LH values, 2nd column for RH values
-    :param coord: coordinate of slice in um (not needed when slice='top')
-    :param slice: orientation of slice, options are 'coronal', 'sagittal', 'horizontal', 'top' (top view of brain)
-    :param mapping: atlas mapping to use, options are 'Allen', 'Beryl' or 'Cosmos'
-    :param hemisphere: hemisphere to display, options are 'left', 'right', 'both'
-    :param background: background slice to overlay onto, options are 'image' or 'boundary'
-    :param cmap: colormap to use
-    :param clevels: min max color levels [cim, cmax]
-    :param brain_atlas: AllenAtlas object
-    :param colorbar: whether to plot a colorbar
-    :param ax: optional axis object to plot on
-    :return:
-    """
+    """Plot scalar values for brain regions on a 2D atlas slice.
 
+    Parameters
+    ----------
+    regions : array_like
+        Array of acronyms of Allen regions.
+    values : array_like
+        Array of scalar values, one per region in `regions`. If `hemisphere` is 'both'
+        and different values are desired for each hemisphere, `values` should be a
+        2D array with shape (n_regions, 2), with column 0 for left and column 1 for right.
+    coord : int, optional
+        Coordinate of the slice in micrometers (AP for coronal, ML for sagittal,
+        DV for horizontal). Not used if `slice` is 'top'. Default is -1000.
+    slice : {'coronal', 'sagittal', 'horizontal', 'top'}, optional
+        Orientation of the slice. 'top' provides a top-down view of the brain.
+        Default is 'coronal'.
+    mapping : {'Allen', 'Beryl', 'Cosmos'}, optional
+        Atlas mapping to use. Default is 'Beryl'.
+    hemisphere : {'left', 'right', 'both'}, optional
+        Hemisphere to display. Default is 'left'.
+    background : {'image', 'boundary'}, optional
+        Background to plot data on. 'image' uses the atlas image, 'boundary' uses
+        region outlines. Default is 'boundary'.
+    cmap : str or matplotlib.colors.Colormap, optional
+        Colormap for the scalar values. Default is 'viridis'.
+    clevels : tuple, optional
+        Tuple of (min, max) for the color levels. If None, determined from `values`.
+        Default is None.
+    brain_atlas : iblatlas.atlas.AllenAtlas, optional
+        An AllenAtlas instance. If None, a new one is created.
+    colorbar : bool, optional
+        Whether to plot a colorbar. Default is False.
+    ax : matplotlib.axes.Axes, optional
+        An existing axes object to plot on. If None, a new figure and axes are created.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        The figure object.
+    ax : matplotlib.axes.Axes
+        The axes object with the plot.
+    """
     if clevels is None:
         clevels = (np.min(values), np.max(values))
 
@@ -823,20 +936,31 @@ def plot_scalar_on_slice(
 
 
 def make_bins(signal, timestamps, start_times, stop_times, binsize):
-    """
-    Bin a signal into specified time intervals and compute the mean value for each bin.
-    Parameters:
-        signal (array-like): The signal values to be binned.
-        timestamps (array-like): The timestamps corresponding to the signal values.
-        start_times (array-like): The start times of the intervals to bin the signal.
-        stop_times (array-like): The stop times of the intervals to bin the signal.
-        binsize (float): The size of each bin in seconds.
-    Returns:
-        list: A list of arrays, where each array contains the mean values of the signal
-              for the bins within the corresponding interval defined by start_times and stop_times.
-    """
+    """Bin a signal into time intervals and compute the mean for each bin.
 
+    For each interval defined by a `start_time` and `stop_time`, this function
+    divides the interval into bins of `binsize` and computes the mean of the
+    `signal` within each bin.
 
+    Parameters
+    ----------
+    signal : array_like
+        The signal values to be binned.
+    timestamps : array_like
+        The timestamps corresponding to the signal values.
+    start_times : array_like
+        The start times of the intervals to bin.
+    stop_times : array_like
+        The stop times of the intervals to bin. Must be same length as `start_times`.
+    binsize : float
+        The size of each bin in seconds.
+
+    Returns
+    -------
+    list of numpy.ndarray
+        A list where each element is a NumPy array of the binned signal means for
+        the corresponding interval.
+    """
     # Loop over start times
     binned_signal = []
     for (start, end) in np.vstack((start_times, stop_times)).T:
@@ -848,34 +972,45 @@ def make_bins(signal, timestamps, start_times, stop_times, binsize):
 def calculate_peths(
         spike_times, spike_clusters, cluster_ids, align_times, pre_time=0.2,
         post_time=0.5, bin_size=0.025, smoothing=0.025, return_fr=True):
-    """
-    Calcluate peri-event time histograms; return means and standard deviations
-    for each time point across specified clusters
+    """Calculate peri-event time histograms (PETHs).
 
-    :param spike_times: spike times (in seconds)
-    :type spike_times: array-like
-    :param spike_clusters: cluster ids corresponding to each event in `spikes`
-    :type spike_clusters: array-like
-    :param cluster_ids: subset of cluster ids for calculating peths
-    :type cluster_ids: array-like
-    :param align_times: times (in seconds) to align peths to
-    :type align_times: array-like
-    :param pre_time: time (in seconds) to precede align times in peth
-    :type pre_time: float
-    :param post_time: time (in seconds) to follow align times in peth
-    :type post_time: float
-    :param bin_size: width of time windows (in seconds) to bin spikes
-    :type bin_size: float
-    :param smoothing: standard deviation (in seconds) of Gaussian kernel for
-        smoothing peths; use `smoothing=0` to skip smoothing
-    :type smoothing: float
-    :param return_fr: `True` to return (estimated) firing rate, `False` to return spike counts
-    :type return_fr: bool
-    :return: peths, binned_spikes
-    :rtype: peths: Bunch({'mean': peth_means, 'std': peth_stds, 'tscale': ts, 'cscale': ids})
-    :rtype: binned_spikes: np.array (n_align_times, n_clusters, n_bins)
-    """
+    Computes PETHs for multiple clusters aligned to a set of event times.
 
+    Parameters
+    ----------
+    spike_times : array_like
+        Spike times (in seconds).
+    spike_clusters : array_like
+        Cluster IDs corresponding to each spike.
+    cluster_ids : array_like
+        The subset of cluster IDs for which to calculate PETHs.
+    align_times : array_like
+        Times (in seconds) to align the PETHs to.
+    pre_time : float, optional
+        Time (in seconds) to include before the align times. Default is 0.2.
+    post_time : float, optional
+        Time (in seconds) to include after the align times. Default is 0.5.
+    bin_size : float, optional
+        Width of PETH bins in seconds. Default is 0.025.
+    smoothing : float, optional
+        Standard deviation (in seconds) of Gaussian kernel for smoothing.
+        Set to 0 for no smoothing. Default is 0.025.
+    return_fr : bool, optional
+        If True, return firing rates (Hz). If False, return spike counts.
+        Default is True.
+
+    Returns
+    -------
+    peths : dict
+        A dictionary containing:
+        - 'means': PETH means (n_clusters, n_bins).
+        - 'stds': PETH standard deviations (n_clusters, n_bins).
+        - 'tscale': Time vector for the PETH bins.
+        - 'cscale': The cluster IDs.
+    binned_spikes : numpy.ndarray
+        The binned spike counts or rates for each trial, with shape
+        (n_align_times, n_clusters, n_bins).
+    """
     # initialize containers
     n_offset = 5 * int(np.ceil(smoothing / bin_size))  # get rid of boundary effects for smoothing
     n_bins_pre = int(np.ceil(pre_time / bin_size)) + n_offset
@@ -956,42 +1091,37 @@ def calculate_peths(
 
 def binned_rate_timewarped(spike_times, spike_clusters, trials_df, start='stimOn_times',
         end='firstMovement_times', n_bins=10):
-    """
-    Compute time-warped binned firing rates for neurons across trials.
-    This function calculates the firing rates of neurons by binning spike times
-    within specified trial intervals. The intervals are defined by start and end
-    times for each trial, and the spike times are warped to fit within these intervals.
-    Parameters:
-    -----------
-    spike_times : array-like
+    """Compute time-warped binned firing rates for neurons across trials.
+
+    For each trial, the interval between a start and end event is divided into
+    `n_bins` equal-width bins. The firing rate of each neuron is calculated for
+    each of these time-warped bins.
+
+    Parameters
+    ----------
+    spike_times : array_like
         1D array of spike times (in seconds).
-    spike_clusters : array-like
+    spike_clusters : array_like
         1D array of cluster IDs corresponding to each spike time.
     trials_df : pandas.DataFrame
         DataFrame containing trial information. Must include columns specified
         by the `start` and `end` parameters.
     start : str, optional
-        Column name in `trials_df` indicating the start times of trials. Default is 'stimOn_times'.
+        Column name in `trials_df` for the start times of trial intervals.
+        Default is 'stimOn_times'.
     end : str, optional
-        Column name in `trials_df` indicating the end times of trials. Default is 'firstMovement_times'.
+        Column name in `trials_df` for the end times of trial intervals.
+        Default is 'firstMovement_times'.
     n_bins : int, optional
         Number of bins to divide each trial interval into. Default is 10.
-    Returns:
-    --------
-    binned_rate : numpy.ndarray
-        3D array of shape (n_trials, n_neurons, n_bins) containing the firing rates
-        of neurons in each bin for each trial. Firing rates are computed as spike
-        counts divided by bin width.
-    neuron_ids : numpy.ndarray
-        1D array of unique neuron IDs corresponding to the `spike_clusters` input.
-    Notes:
-    ------
-    - The function uses `np.digitize` to assign spikes to bins and `binned_statistic_2d`
-        to count spikes per neuron per bin.
-    - Spike times outside the trial interval are excluded from the computation.
-    - The bin width is computed as the average width of the bins within each trial.
-    """
 
+    Returns
+    -------
+    binned_rate : numpy.ndarray
+        3D array of shape (n_trials, n_neurons, n_bins) containing the firing rates (in Hz).
+    neuron_ids : numpy.ndarray
+        1D array of unique neuron IDs, corresponding to the second dimension of `binned_rate`.
+    """
     # Precompute unique neuron IDs and number of neurons
     neuron_ids = np.unique(spike_clusters)
     n_neurons = neuron_ids.shape[0]
@@ -1037,70 +1167,55 @@ def peri_multiple_events_time_histogram(
         errbar_kwargs=[{'color': 'blue', 'alpha': 0.5}, {'color': 'red', 'alpha': 0.5}],
         raster_kwargs=[{'color': 'blue', 'lw': 0.5}, {'color': 'red', 'lw': 0.5}],
         eventline_kwargs={'color': 'black', 'alpha': 0.5}, **kwargs):
-    """
-    Plot peri-event time histograms, with the meaning firing rate of units centered on a given
-    series of events. Can optionally add a raster underneath the PETH plot of individual spike
-    trains about the events.
+    """Plot PETHs for a single neuron aligned to multiple event types.
+
+    This function plots the mean firing rate of a neuron aligned to different
+    sets of events, distinguished by `event_ids`. It can optionally include
+    error bars and a spike raster plot.
 
     Parameters
     ----------
     spike_times : array_like
-        Spike times (in seconds)
+        Spike times (in seconds).
     spike_clusters : array-like
-        Cluster identities for each element of spikes
+        Cluster identities for each spike.
     events : array-like
-        Times to align the histogram(s) to
+        Times to align the histogram(s) to.
     event_ids : array-like
-        Identities of events
+        Identities of events, used to group `events`.
     cluster_id : int
-        Identity of the cluster for which to plot a PETH
-
+        Identity of the cluster for which to plot a PETH.
     t_before : float, optional
-        Time before event to plot (default: 0.2s)
+        Time before event to plot (in seconds). Default is 0.2.
     t_after : float, optional
-        Time after event to plot (default: 0.5s)
-    bin_size :float, optional
-        Width of bin for histograms (default: 0.025s)
+        Time after event to plot (in seconds). Default is 0.5.
+    bin_size : float, optional
+        Width of histogram bins (in seconds). Default is 0.025.
     smoothing : float, optional
-        Sigma of gaussian smoothing to use in histograms. (default: 0.025s)
+        Sigma of Gaussian smoothing kernel (in seconds). Default is 0.025.
     as_rate : bool, optional
-        Whether to use spike counts or rates in the plot (default: `True`, uses rates)
+        If True, y-axis is firing rate (Hz). If False, it's spike counts. Default is True.
     include_raster : bool, optional
-        Whether to put a raster below the PETH of individual spike trains (default: `False`)
+        If True, adds a raster plot below the PETH. Default is False.
     error_bars : {'std', 'sem', 'none'}, optional
-        Defines which type of error bars to plot. Options are:
-        -- `'std'` for 1 standard deviation
-        -- `'sem'` for standard error of the mean
-        -- `'none'` for only plotting the mean value
-        (default: `'std'`)
-    ax : matplotlib axes, optional
-        If passed, the function will plot on the passed axes. Note: current
-        behavior causes whatever was on the axes to be cleared before plotting!
-        (default: `None`)
-    pethline_kwargs : dict, optional
-        Dict containing line properties to define PETH plot line. Default
-        is a blue line with weight of 2. Needs to have color. See matplotlib plot documentation
-        for more options.
-        (default: `{'color': 'blue', 'lw': 2}`)
-    errbar_kwargs : dict, optional
-        Dict containing fill-between properties to define PETH error bars.
-        Default is a blue fill with 50 percent opacity.. Needs to have color. See matplotlib
-        fill_between documentation for more options.
-        (default: `{'color': 'blue', 'alpha': 0.5}`)
+        Type of error bars to plot: 'std' for standard deviation, 'sem' for
+        standard error of the mean. Default is 'sem'.
+    ax : matplotlib.axes.Axes, optional
+        Axes to plot on. If None, a new figure and axes are created.
+    pethline_kwargs : list of dict, optional
+        List of dictionaries with keyword arguments for the PETH line plots (e.g., `color`, `lw`),
+        one for each unique event ID.
+    errbar_kwargs : list of dict, optional
+        List of dictionaries with keyword arguments for the error bar fill.
+    raster_kwargs : list of dict, optional
+        List of dictionaries with keyword arguments for the raster plot lines.
     eventline_kwargs : dict, optional
-        Dict containing fill-between properties to define line at event.
-        Default is a black line with 50 percent opacity.. Needs to have color. See matplotlib
-        vlines documentation for more options.
-        (default: `{'color': 'black', 'alpha': 0.5}`)
-    raster_kwargs : dict, optional
-        Dict containing properties defining lines in the raster plot.
-        Default is black lines with line width of 0.5. See matplotlib vlines for more options.
-        (default: `{'color': 'black', 'lw': 0.5}`)
+        Dictionary with keyword arguments for the vertical line at time 0.
 
     Returns
     -------
-        ax : matplotlib axes
-            Axes with all of the plots requested.
+    matplotlib.axes.Axes
+        The axes object with the plot.
     """
 
     # Check to make sure if we fail, we fail in an informative way
@@ -1176,7 +1291,27 @@ def peri_multiple_events_time_histogram(
 
 
 def calculate_mi(spike_counts_A, spike_counts_B):
+    """Calculate the mutual information between two discrete variables.
 
+    Parameters
+    ----------
+    spike_counts_A : array_like
+        A 1D array of observations for the first variable.
+    spike_counts_B : array_like
+        A 1D array of observations for the second variable. Must be the same
+        length as `spike_counts_A`.
+
+    Returns
+    -------
+    float
+        The mutual information in bits.
+
+    Notes
+    -----
+    The number of bins for the 2D histogram is set to the number of observations,
+    which may not be optimal for continuous data. This function is best suited for
+    discrete data where `spike_counts_A` and `spike_counts_B` represent counts or categories.
+    """
     # Calculate joint probability distribution
     joint_hist, _, _ = np.histogram2d(spike_counts_A, spike_counts_B, bins=spike_counts_A.shape[0])
     joint_prob = joint_hist / np.sum(joint_hist)
@@ -1195,6 +1330,33 @@ def calculate_mi(spike_counts_A, spike_counts_B):
 
 
 def get_dlc_XYs_old(one, eid, view='left', likelihood_thresh=0.9):
+    """Load DeepLabCut (DLC) tracking data from a .pqt file (legacy).
+
+    .. deprecated::
+        Use `get_dlc_XYs` instead, which uses the more modern `SessionLoader`.
+
+    This function loads DLC coordinates and camera timestamps for a given session.
+    It filters coordinates based on a likelihood threshold.
+
+    Parameters
+    ----------
+    one : one.api.ONE
+        An initialized ONE instance.
+    eid : str
+        The experiment ID of the session.
+    view : {'left', 'right', 'body'}, optional
+        The camera view to load. Default is 'left'.
+    likelihood_thresh : float, optional
+        The likelihood threshold below which coordinates are set to NaN. Default is 0.9.
+
+    Returns
+    -------
+    times : numpy.ndarray or None
+        An array of camera frame timestamps. None if timestamps can't be loaded.
+    XYs : dict or None
+        A dictionary where keys are tracked body parts and values are (n_frames, 2)
+        numpy arrays of (x, y) coordinates. None if DLC data can't be loaded.
+    """
     ses_details = one.get_details(eid)
     subject = ses_details['subject']
     date = ses_details['date']
@@ -1224,7 +1386,28 @@ def get_dlc_XYs_old(one, eid, view='left', likelihood_thresh=0.9):
 
 
 def get_dlc_XYs(one, eid, view='left'):
+    """Load DeepLabCut (DLC) tracking data using SessionLoader.
 
+    This function uses `brainbox.io.one.SessionLoader` to load pose estimation data
+    and returns it in a format compatible with older functions.
+
+    Parameters
+    ----------
+    one : one.api.ONE
+        An initialized ONE instance.
+    eid : str
+        The experiment ID of the session.
+    view : {'left', 'right', 'body'}, optional
+        The camera view to load. Default is 'left'.
+
+    Returns
+    -------
+    times : numpy.ndarray
+        An array of camera frame timestamps.
+    XYs : dict
+        A dictionary where keys are tracked body parts and values are (n_frames, 2)
+        numpy arrays of (x, y) coordinates.
+    """
     # Load in DLC
     sl = SessionLoader(one=one, eid=eid)
     sl.load_pose(views=[view])
@@ -1243,25 +1426,30 @@ def get_dlc_XYs(one, eid, view='left'):
 
 
 def smooth_interpolate_signal_sg(signal, window=31, order=3, interp_kind='cubic'):
-    """Run savitzy-golay filter on signal, interpolate through nan points.
+    """Smooth and interpolate a signal using a Savitzky-Golay filter.
+
+    This function handles NaNs in the input signal by applying a non-uniform
+    Savitzky-Golay filter (`non_uniform_savgol`) to the valid data points,
+    and then interpolating the missing (NaN) values.
 
     Parameters
     ----------
     signal : np.ndarray
-        original noisy signal of shape (t,), may contain nans
-    window : int
-        window of polynomial fit for savitzy-golay filter
-    order : int
-        order of polynomial for savitzy-golay filter
-    interp_kind : str
-        type of interpolation for nans, e.g. 'linear', 'quadratic', 'cubic'
+        1D array representing the signal to be smoothed. May contain NaNs.
+    window : int, optional
+        The length of the filter window for the Savitzky-Golay filter. Must be an
+        odd integer. Default is 31.
+    order : int, optional
+        The order of the polynomial used to fit the samples. Default is 3.
+    interp_kind : str, optional
+        The kind of interpolation to use for filling NaNs, passed to
+        `scipy.interpolate.interp1d`. Default is 'cubic'.
+
     Returns
     -------
-    np.array
-        smoothed, interpolated signal for each time point, shape (t,)
-
+    np.ndarray
+        The smoothed and interpolated signal.
     """
-
     signal_noisy_w_nans = np.copy(signal)
     timestamps = np.arange(signal_noisy_w_nans.shape[0])
     good_idxs = np.where(~np.isnan(signal_noisy_w_nans))[0]
@@ -1280,25 +1468,27 @@ def smooth_interpolate_signal_sg(signal, window=31, order=3, interp_kind='cubic'
 
 
 def non_uniform_savgol(x, y, window, polynom):
-    """Applies a Savitzky-Golay filter to y with non-uniform spacing as defined in x.
-    This is based on
-    https://dsp.stackexchange.com/questions/1676/savitzky-golay-smoothing-filter-for-not-equally-spaced-data
-    The borders are interpolated like scipy.signal.savgol_filter would do
-    https://dsp.stackexchange.com/a/64313
+    """Apply a Savitzky-Golay filter to non-uniformly spaced data.
+
+    This implementation is based on the method described on StackExchange for data
+    with non-uniform spacing.
+    Source: https://dsp.stackexchange.com/questions/1676/savitzky-golay-smoothing-filter-for-not-equally-spaced-data
+
     Parameters
     ----------
     x : array_like
-        List of floats representing the x values of the data
+        The x-coordinates of the data points (timestamps).
     y : array_like
-        List of floats representing the y values. Must have same length as x
-    window : int (odd)
-        Window length of datapoints. Must be odd and smaller than x
+        The y-coordinates of the data points (signal values). Must have same length as x.
+    window : int
+        The length of the filter window. Must be an odd integer.
     polynom : int
-        The order of polynom used. Must be smaller than the window size
+        The order of the polynomial to use. Must be less than `window`.
+
     Returns
     -------
-    np.array
-        The smoothed y values
+    np.ndarray
+        The smoothed y values.
     """
 
     if len(x) != len(y):
@@ -1388,26 +1578,26 @@ def non_uniform_savgol(x, y, window, polynom):
 
 
 def get_pupil_diameter(XYs):
-    """Estimate pupil diameter by taking median of different computations.
+    """Estimate pupil diameter from four tracked points.
 
-    In the two most obvious ways:
-    d1 = top - bottom, d2 = left - right
-
-    In addition, assume the pupil is a circle and estimate diameter from other pairs of
-    points
+    This function computes the pupil diameter in multiple ways and returns the median
+    estimate. It calculates the direct distance between top-bottom and left-right
+    markers, and also estimates the diameter from pairs of adjacent markers assuming
+    a circular pupil.
 
     Author: Michael Schartner
 
     Parameters
     ----------
     XYs : dict
-        keys should include `pupil_top_r`, `pupil_bottom_r`,
-        `pupil_left_r`, `pupil_right_r`
+        A dictionary of DLC coordinates. Must contain keys: 'pupil_top_r',
+        'pupil_bottom_r', 'pupil_left_r', 'pupil_right_r'. Each value should be
+        an (n_frames, 2) array of (x, y) coordinates.
+
     Returns
     -------
-    np.array
-        pupil diameter estimate for each time point, shape (n_frames,)
-
+    np.ndarray
+        The estimated pupil diameter for each time point (n_frames,).
     """
 
     # direct diameters
@@ -1438,7 +1628,27 @@ def get_pupil_diameter(XYs):
 
 
 def get_raw_smooth_pupil_diameter(XYs):
+    """Compute raw and smoothed pupil diameter from DLC coordinates.
 
+    This function first computes a raw pupil diameter estimate using `get_pupil_diameter`.
+    It then applies a two-pass smoothing and outlier removal procedure:
+    1. Smooth the raw signal to identify outliers.
+    2. Remove outliers from the raw signal.
+    3. Smooth the cleaned signal again.
+    Long gaps of NaNs are not interpolated.
+
+    Parameters
+    ----------
+    XYs : dict
+        A dictionary of DLC coordinates passed to `get_pupil_diameter`.
+
+    Returns
+    -------
+    diam0 : np.ndarray
+        The raw, noisy pupil diameter estimate.
+    diam_sm1 : np.ndarray
+        The final smoothed and cleaned pupil diameter estimate.
+    """
     # threshold (in standard deviations) beyond which a point is labeled as an outlier
     std_thresh = 5
 
@@ -1481,7 +1691,23 @@ def get_raw_smooth_pupil_diameter(XYs):
 
 
 def SNR(diam0, diam_sm1):
+    """Calculate the Signal-to-Noise Ratio (SNR) of a signal.
 
+    The SNR is computed as the ratio of the variance of the smoothed signal (the "signal")
+    to the variance of the residual (raw - smoothed, the "noise").
+
+    Parameters
+    ----------
+    diam0 : np.ndarray
+        The raw signal, which may contain NaNs.
+    diam_sm1 : np.ndarray
+        The smoothed signal, which may contain NaNs.
+
+    Returns
+    -------
+    float
+        The computed SNR.
+    """
     # compute signal to noise ratio between raw and smooth dia
     good_idxs = np.where(~np.isnan(diam_sm1) & ~np.isnan(diam0))[0]
     snr = (np.var(diam_sm1[good_idxs]) /
@@ -1491,6 +1717,24 @@ def SNR(diam0, diam_sm1):
 
 
 def query_opto_sessions(subject, include_ephys=False, one=None):
+    """Query optogenetic sessions for a given subject.
+
+    Parameters
+    ----------
+    subject : str
+        The name of the subject.
+    include_ephys : bool, optional
+        If True, queries for all opto task protocols (`_iblrig_tasks_opto_`).
+        If False, queries only for the biased choice world opto task
+        (`_iblrig_tasks_opto_biasedChoiceWorld`). Default is False.
+    one : one.api.ONE, optional
+        An initialized ONE instance. If None, a new one is created.
+
+    Returns
+    -------
+    list of str
+        A list of session EIDs for the matching sessions.
+    """
     one = one or ONE()
     if include_ephys:
         sessions = one.alyx.rest('sessions', 'list', subject=subject,
@@ -1503,6 +1747,34 @@ def query_opto_sessions(subject, include_ephys=False, one=None):
 
 def behavioral_criterion(eids, min_perf=0.7, min_trials=200, max_rt=0.7, return_excluded=False,
                          verbose=True, one=None):
+    """Filter sessions based on behavioral performance criteria.
+
+    This function iterates through a list of session EIDs and keeps only those that
+    meet specified criteria for performance, number of trials, and reaction time.
+
+    Parameters
+    ----------
+    eids : list of str
+        A list of session EIDs to filter.
+    min_perf : float, optional
+        Minimum performance on high-contrast trials (contrast=1). Default is 0.7.
+    min_trials : int, optional
+        Minimum total number of trials in the session. Default is 200.
+    max_rt : float, optional
+        Maximum median reaction time (feedback_time - goCue_time). Default is 0.7s.
+    return_excluded : bool, optional
+        If True, also returns a list of the excluded EIDs. Default is False.
+    verbose : bool, optional
+        If True, prints information about excluded sessions. Default is True.
+    one : one.api.ONE, optional
+        An initialized ONE instance. If None, a new one is created.
+
+    Returns
+    -------
+    list of str or (list of str, list of str)
+        If `return_excluded` is False, returns a list of EIDs that passed the criteria.
+        If `return_excluded` is True, returns a tuple of (passed_eids, excluded_eids).
+    """
     if one is None:
         one = ONE()
     use_eids, excl_eids = [], []
@@ -1531,9 +1803,29 @@ def behavioral_criterion(eids, min_perf=0.7, min_trials=200, max_rt=0.7, return_
 
 
 def fit_psychfunc(stim_levels, n_trials, proportion, transform_slope=False):
-    # Fit a psychometric function with two lapse rates
-    #
-    # Returns vector pars with [bias, threshold, lapselow, lapsehigh]
+    """Fit a psychometric function to behavioral data.
+
+    This function uses `psychofit.mle_fit_psycho` to fit a 4-parameter psychometric
+    function (bias, threshold, low-lapse, high-lapse) to choice data.
+
+    Parameters
+    ----------
+    stim_levels : array_like
+        The stimulus levels (e.g., contrast). Assumed to be in range [-100, 100].
+    n_trials : array_like
+        The number of trials at each stimulus level.
+    proportion : array_like
+        The proportion of 'rightward' choices at each stimulus level.
+    transform_slope : bool, optional
+        If True, transforms the threshold parameter to be a slope parameter (1/threshold * 100).
+        Default is False.
+
+    Returns
+    -------
+    numpy.ndarray
+        A 4-element array containing the fitted parameters:
+        [bias, threshold/slope, lapse_low, lapse_high].
+    """
     import psychofit as psy
     assert (stim_levels.shape == n_trials.shape == proportion.shape)
     if stim_levels.max() <= 1:
@@ -1554,6 +1846,27 @@ def fit_psychfunc(stim_levels, n_trials, proportion, transform_slope=False):
 
 
 def plot_psychometric(trials, ax, color='b', linestyle='solid', fraction=True):
+    """Plot a psychometric function for a set of trials.
+
+    This function fits a psychometric curve to the provided trial data using
+    `fit_psychfunc` and plots the fitted curve along with the raw data points
+    (mean choice proportion with standard error bars). It also handles a
+    broken x-axis for 100% contrast trials.
+
+    Parameters
+    ----------
+    trials : pandas.DataFrame
+        A trials DataFrame, must contain 'signed_contrast' and 'right_choice' columns.
+    ax : matplotlib.axes.Axes
+        The axes on which to plot.
+    color : str, optional
+        The color for the plot elements. Default is 'b'.
+    linestyle : str, optional
+        The linestyle for the fitted curve. Default is 'solid'.
+    fraction : bool, optional
+        If True, the y-axis is labeled as a fraction. If False, it's labeled as a percentage.
+        Default is True.
+    """
     import psychofit as psy
     if trials['signed_contrast'].max() <= 1:
         trials['signed_contrast'] = trials['signed_contrast'] * 100
@@ -1595,7 +1908,18 @@ def plot_psychometric(trials, ax, color='b', linestyle='solid', fraction=True):
 
 
 def break_xaxis(y=-0.004, **kwargs):
+    """Add break marks to the x-axis of a psychometric plot.
 
+    This is a helper function for `plot_psychometric` to indicate a discontinuity
+    on the x-axis, typically between +/-25% and +/-100% contrast.
+
+    Parameters
+    ----------
+    y : float, optional
+        The y-coordinate at which to draw the break marks. Default is -0.004.
+    **kwargs
+        Additional keyword arguments are passed to `plt.text`, but are currently unused.
+    """
     # axisgate: show axis discontinuities with a quick hack
     # https://twitter.com/StevenDakin/status/1313744930246811653?s=19
     # first, white square for discontinuous axis
@@ -1614,11 +1938,24 @@ def break_xaxis(y=-0.004, **kwargs):
 
 
 def get_bias(trials):
+    """Calculate task bias from trial data.
+
+    The bias is calculated by fitting separate psychometric functions to trials from
+    the 80/20 and 20/80 probability blocks. The bias is defined as the difference
+    in the choice probability at 0% contrast between these two blocks.
+
+    Parameters
+    ----------
+    trials : pandas.DataFrame
+        A trials DataFrame containing 'probabilityLeft', 'signed_contrast', and
+        'right_choice' columns.
+
+    Returns
+    -------
+    float
+        The calculated bias value. Returns np.nan if there are no trials.
+    """
     import psychofit as psy
-    """
-    Calculate bias by fitting psychometric curves to the 80/20 and 20/80 blocks, finding the
-    point on the y-axis when contrast = 0% and getting the difference.
-    """
     if len(trials) == 0:
         return np.nan
 
@@ -1640,7 +1977,34 @@ def get_bias(trials):
 
 
 def fit_glm(behav, prior_blocks=True, opto_stim=False, folds=3):
+    """Fit a logistic regression model (GLM) to behavioral choice data.
 
+    This function constructs a design matrix with regressors for previous choice,
+    block bias (prior), and stimulus contrast, separated for optogenetic stimulation
+    and no-stimulation trials. It fits a logistic regression model to predict the
+    current choice and evaluates its accuracy using k-fold cross-validation.
+
+    Parameters
+    ----------
+    behav : pandas.DataFrame
+        A DataFrame containing behavioral data for a session. Must include columns:
+        'signed_contrast', 'laser_stimulation', 'previous_choice', 'block_id',
+        'stim_side', 'trial_feedback_type', 'choice'.
+    prior_blocks : bool, optional
+        This parameter is unused.
+    opto_stim : bool, optional
+        This parameter is unused.
+    folds : int, optional
+        The number of folds for cross-validation to calculate model accuracy.
+        Default is 3.
+
+    Returns
+    -------
+    pandas.DataFrame
+        A single-row DataFrame containing the fitted model parameters (coefficients)
+        as columns, along with 'pseudo_rsq', 'condition_number', and cross-validated
+        'accuracy'.
+    """
     # drop trials with contrast-level 50, only rarely present (should not be its own regressor)
     behav = behav[np.abs(behav.signed_contrast) != 50]
 
