@@ -1166,7 +1166,8 @@ def peri_multiple_events_time_histogram(
         pethline_kwargs=[{'color': 'blue', 'lw': 2}, {'color': 'red', 'lw': 2}],
         errbar_kwargs=[{'color': 'blue', 'alpha': 0.5}, {'color': 'red', 'alpha': 0.5}],
         raster_kwargs=[{'color': 'blue', 'lw': 0.5}, {'color': 'red', 'lw': 0.5}],
-        eventline_kwargs={'color': 'black', 'alpha': 0.5}, **kwargs):
+        eventline_kwargs={'color': 'black', 'alpha': 0.5},
+        labels=None, include_legend=False, **kwargs):
     """Plot PETHs for a single neuron aligned to multiple event types.
 
     This function plots the mean firing rate of a neuron aligned to different
@@ -1211,6 +1212,10 @@ def peri_multiple_events_time_histogram(
         List of dictionaries with keyword arguments for the raster plot lines.
     eventline_kwargs : dict, optional
         Dictionary with keyword arguments for the vertical line at time 0.
+    labels : list of str, optional
+        List of labels for each event type to be used in the legend. Default is None.
+    include_legend : bool, optional
+        Whether to include a legend in the plot. Default is False.
 
     Returns
     -------
@@ -1241,7 +1246,8 @@ def peri_multiple_events_time_histogram(
                                                           events[event_ids == event_id], t_before,
                                                           t_after, bin_size, smoothing, as_rate)
         mean = peths.means[0, :]
-        ax.plot(peths.tscale, mean, **pethline_kwargs[i])
+        label = labels[i] if labels is not None else None
+        ax.plot(peths.tscale, mean, label=label, **pethline_kwargs[i])
         if error_bars == 'std':
             bars = peths.stds[0, :]
         elif error_bars == 'sem':
@@ -1284,6 +1290,8 @@ def peri_multiple_events_time_histogram(
         ax.set_ylabel('Firing Rate' if as_rate else 'Number of spikes', y=0.75)
     else:
         ax.set_ylabel('Firing Rate' if as_rate else 'Number of spikes')
+    if include_legend:
+        ax.legend()
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.set_xlabel('Time (s) after event')

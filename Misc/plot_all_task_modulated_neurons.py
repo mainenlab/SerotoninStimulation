@@ -6,35 +6,28 @@ By Guido Meijer
 """
 
 import numpy as np
-from os.path import join, isdir, exists
+from os.path import join
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
-from matplotlib.patches import Rectangle
 import seaborn as sns
 import pandas as pd
-from os import mkdir
 from brainbox.io.one import SpikeSortingLoader
-from brainbox.plot import peri_event_time_histogram
-from brainbox.singlecell import calculate_peths
 from stim_functions import paths, load_trials, figure_style, peri_multiple_events_time_histogram
 from one.api import ONE
 from iblatlas.atlas import AllenAtlas
 ba = AllenAtlas()
 one = ONE()
+fig_path, save_path = paths()
+colors, dpi = figure_style()
 
 # Settings
-#PATH = r'C:\Users\Guido1\Figures\5-HT\SingleNeurons'
 PATH = r'C:\Users\Guido1\Figures\5-HT\TaskModNeurons'
-#PATH = r'C:\Users\guido\Figures\5HT\Ephys\SingleNeurons\LightModNeurons'
-#PATH = r'C:\Users\guido\Figures\5HT\Ephys\SingleNeurons\TaskModNeurons'
 T_BEFORE = 1  # for plotting
 T_AFTER = 3
 BIN_SIZE = 0.05
 SMOOTHING = 0.025
 PLOT_LATENCY = False
 OVERWRITE = True
-_, save_path = paths()
-colors, dpi = figure_style()
 
 # Load in data
 all_neurons = pd.read_csv(join(save_path, 'task_modulated_neurons.csv'))
@@ -48,9 +41,16 @@ for i, pid in enumerate(np.unique(all_neurons['pid'])):
     date = np.unique(all_neurons.loc[all_neurons['pid'] == pid, 'date'])[0]
     print(f'Starting {subject}, {date}, {probe}')
 
-    # Load in laser pulse times
+    # Load in trials
     trials = load_trials(eid, laser_stimulation=True, one=one)
-    zero_contr_trials = trials[trials['signed_contrast'] == 0]
+
+    # Generate an array with 1, 2, 3, 4 for four conditions: laser_stimulation 0 or 1 and choice -1 or 1
+    trials['conditions'] = 0
+    trials.loc[(trials['laser_stimulation'] == 1) & (trials['choice'] == -1), 'conditions'] = 1
+    trials.loc[(trials['laser_stimulation'] == 0) & (trials['choice'] == -1), 'conditions'] = 2
+    trials.loc[(trials['laser_stimulation'] == 1) & (trials['choice'] == 1), 'conditions'] = 3
+    trials.loc[(trials['laser_stimulation'] == 0) & (trials['choice'] == 1), 'conditions'] = 4
+    trials = trials[(trials['conditions'] != 0) & (np.abs(trials['signed_contrast']) > 0) & (np.abs(trials['signed_contrast']) < 1)]
 
     # Load in spikes
     sl = SpikeSortingLoader(pid=pid, one=one, atlas=ba)
@@ -73,15 +73,21 @@ for i, pid in enumerate(np.unique(all_neurons['pid'])):
         # Plot PSTH
         p, ax = plt.subplots(1, 1, figsize=(1.75, 1.75), dpi=dpi)
         peri_multiple_events_time_histogram(
-            spikes.times, spikes.clusters, zero_contr_trials['goCue_times'],
-            zero_contr_trials['laser_stimulation'],
+            spikes.times, spikes.clusters, trials['goCue_times'],
+            trials['conditions'],
             neuron_id, t_before=T_BEFORE, t_after=T_AFTER, bin_size=BIN_SIZE, ax=ax,
-            pethline_kwargs=[{'color': colors['no-stim'], 'lw': 1},
-                             {'color': colors['stim'], 'lw': 1}],
-            errbar_kwargs=[{'color': colors['no-stim'], 'alpha': 0.3, 'lw': 0},
-                           {'color': colors['stim'], 'alpha': 0.3, 'lw': 0}],
-            raster_kwargs=[{'color': colors['no-stim'], 'lw': 0.5},
-                           {'color': colors['stim'], 'lw': 0.5}],
+            pethline_kwargs=[{'color': colors['left-stim'], 'lw': 1},
+                             {'color': colors['left-no-stim'], 'lw': 1},
+                             {'color': colors['right-stim'], 'lw': 1},
+                             {'color': colors['right-no-stim'], 'lw': 1}],
+            errbar_kwargs=[{'color': colors['left-stim'], 'alpha': 0.3, 'lw': 0},
+                           {'color': colors['left-no-stim'], 'alpha': 0.3, 'lw': 0},
+                           {'color': colors['right-stim'], 'alpha': 0.3, 'lw': 0},
+                           {'color': colors['right-no-stim'], 'alpha': 0.3, 'lw': 0}],
+            raster_kwargs=[{'color': colors['left-stim'], 'lw': 0.5},
+                           {'color': colors['left-no-stim'], 'lw': 0.5},
+                           {'color': colors['right-stim'], 'lw': 0.5},
+                           {'color': colors['right-no-stim'], 'lw': 0.5}],
             eventline_kwargs={'lw': 0}, include_raster=True)
         ax.set(ylabel='Firing rate (spikes/s)', xlabel='Time from trial start (s)',
                yticks=np.linspace(0, np.round(ax.get_ylim()[1]), 3), xticks=[-1, 0, 1, 2, 3],
@@ -93,5 +99,5 @@ for i, pid in enumerate(np.unique(all_neurons['pid'])):
         sns.despine(trim=False)
         plt.tight_layout()
         plt.savefig(
-            join(PATH, f'{region}_{subject}_{date}_{probe}_neuron{neuron_id}.jpg'), dpi=600)
+            join(PATH, f'{pid}_neuron{neuron_id}.jpg'), dpi=600)
         plt.close(p)
