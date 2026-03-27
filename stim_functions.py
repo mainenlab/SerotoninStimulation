@@ -209,10 +209,10 @@ def figure_style():
               'Striatum': sns.color_palette('Accent')[1],
               'Olfactory areas': sns.color_palette('tab10')[8],
               'Retrosplenial cortex': 'r',
-              'left-stim': sns.color_palette('Paired')[7],
-              'left-no-stim': sns.color_palette('Paired')[6],
-              'right-stim': sns.color_palette('Paired')[9],
-              'right-no-stim': sns.color_palette('Paired')[8]}
+              'left-stim': 'royalblue',
+              'left-no-stim': 'rebeccapurple',
+              'right-stim': 'darkorange',
+              'right-no-stim': 'firebrick'}
     screen_width = tk.Tk().winfo_screenwidth()
     dpi = screen_width / 10
     return colors, dpi

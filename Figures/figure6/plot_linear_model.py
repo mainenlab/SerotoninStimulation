@@ -31,6 +31,7 @@ linear_df['region'] = combine_regions(remap(linear_df['acronym']))
 linear_df = linear_df[linear_df['region'] != 'root']
 linear_df['coef_choice_abs'] = np.abs(linear_df['coef_choice'])
 linear_df['coef_stim_abs'] = np.abs(linear_df['coef_stim'])
+linear_df['coef_stim_abs'] = np.abs(linear_df['coef_stim'])
 
 # Add genotype and subject number
 subjects = load_subjects()

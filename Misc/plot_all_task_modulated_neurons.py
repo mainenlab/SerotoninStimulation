@@ -21,16 +21,15 @@ fig_path, save_path = paths()
 colors, dpi = figure_style()
 
 # Settings
-PATH = r'C:\Users\Guido1\Figures\5-HT\TaskModNeurons'
-T_BEFORE = 1  # for plotting
-T_AFTER = 3
-BIN_SIZE = 0.05
-SMOOTHING = 0.025
-PLOT_LATENCY = False
-OVERWRITE = True
+PATH = r'C:\Users\guido\Figures\5HT\Ephys\SingleNeurons\TaskModNeurons'
+T_BEFORE = 0.5  # for plotting
+T_AFTER = 1
+BIN_SIZE = 0.025
+SMOOTHING = 0.01
+CENTER_ON = 'stimOn_times'
 
 # Load in data
-all_neurons = pd.read_csv(join(save_path, 'task_modulated_neurons.csv'))
+all_neurons = pd.read_csv(join(save_path, 'light_modulated_neurons.csv'))
 
 for i, pid in enumerate(np.unique(all_neurons['pid'])):
 
@@ -42,7 +41,15 @@ for i, pid in enumerate(np.unique(all_neurons['pid'])):
     print(f'Starting {subject}, {date}, {probe}')
 
     # Load in trials
-    trials = load_trials(eid, laser_stimulation=True, one=one)
+    try:
+        trials = load_trials(eid, laser_stimulation=True, one=one)
+    except:
+        print('Could not load trials')
+        continue
+
+    # Drop NaNs
+    if CENTER_ON == 'firstMovement_times':
+        trials = trials[~np.isnan(trials['firstMovement_times'])]
 
     # Generate an array with 1, 2, 3, 4 for four conditions: laser_stimulation 0 or 1 and choice -1 or 1
     trials['conditions'] = 0
@@ -50,7 +57,7 @@ for i, pid in enumerate(np.unique(all_neurons['pid'])):
     trials.loc[(trials['laser_stimulation'] == 0) & (trials['choice'] == -1), 'conditions'] = 2
     trials.loc[(trials['laser_stimulation'] == 1) & (trials['choice'] == 1), 'conditions'] = 3
     trials.loc[(trials['laser_stimulation'] == 0) & (trials['choice'] == 1), 'conditions'] = 4
-    trials = trials[(trials['conditions'] != 0) & (np.abs(trials['signed_contrast']) > 0) & (np.abs(trials['signed_contrast']) < 1)]
+    #trials = trials[(trials['conditions'] != 0) & (np.abs(trials['signed_contrast']) > 0) & (np.abs(trials['signed_contrast']) < 1)]
 
     # Load in spikes
     sl = SpikeSortingLoader(pid=pid, one=one, atlas=ba)
@@ -61,43 +68,44 @@ for i, pid in enumerate(np.unique(all_neurons['pid'])):
         print(f'No brain regions found for {eid}')
         continue
         
-    modulated = all_neurons[(all_neurons['pid'] == pid) & (all_neurons['opto_modulated'] == 1)]
+    modulated = all_neurons[(all_neurons['pid'] == pid) & (all_neurons['modulated'] == 1)]
     
     for n, ind in enumerate(modulated.index.values):
         region = modulated.loc[ind, 'region']
         subject = modulated.loc[ind, 'subject']
         date = modulated.loc[ind, 'date']
         neuron_id = modulated.loc[ind, 'neuron_id']
-        p_value = modulated.loc[ind, 'opto_mod_p']
         
         # Plot PSTH
-        p, ax = plt.subplots(1, 1, figsize=(1.75, 1.75), dpi=dpi)
-        peri_multiple_events_time_histogram(
-            spikes.times, spikes.clusters, trials['goCue_times'],
-            trials['conditions'],
-            neuron_id, t_before=T_BEFORE, t_after=T_AFTER, bin_size=BIN_SIZE, ax=ax,
-            pethline_kwargs=[{'color': colors['left-stim'], 'lw': 1},
-                             {'color': colors['left-no-stim'], 'lw': 1},
-                             {'color': colors['right-stim'], 'lw': 1},
-                             {'color': colors['right-no-stim'], 'lw': 1}],
-            errbar_kwargs=[{'color': colors['left-stim'], 'alpha': 0.3, 'lw': 0},
-                           {'color': colors['left-no-stim'], 'alpha': 0.3, 'lw': 0},
-                           {'color': colors['right-stim'], 'alpha': 0.3, 'lw': 0},
-                           {'color': colors['right-no-stim'], 'alpha': 0.3, 'lw': 0}],
-            raster_kwargs=[{'color': colors['left-stim'], 'lw': 0.5},
-                           {'color': colors['left-no-stim'], 'lw': 0.5},
-                           {'color': colors['right-stim'], 'lw': 0.5},
-                           {'color': colors['right-no-stim'], 'lw': 0.5}],
-            eventline_kwargs={'lw': 0}, include_raster=True)
-        ax.set(ylabel='Firing rate (spikes/s)', xlabel='Time from trial start (s)',
-               yticks=np.linspace(0, np.round(ax.get_ylim()[1]), 3), xticks=[-1, 0, 1, 2, 3],
-               title=f'p = {p_value}')
-        if np.round(ax.get_ylim()[1]) % 2 == 0:
-            ax.yaxis.set_major_formatter(FormatStrFormatter('%.0f'))
-        else:
-            ax.yaxis.set_major_formatter(FormatStrFormatter('%.1f'))
-        sns.despine(trim=False)
-        plt.tight_layout()
-        plt.savefig(
-            join(PATH, f'{pid}_neuron{neuron_id}.jpg'), dpi=600)
-        plt.close(p)
+        try:
+            p, ax = plt.subplots(1, 1, figsize=(1.75, 1.75), dpi=dpi)
+            peri_multiple_events_time_histogram(
+                spikes.times, spikes.clusters, trials[CENTER_ON],
+                trials['conditions'],
+                neuron_id, t_before=T_BEFORE, t_after=T_AFTER, bin_size=BIN_SIZE, ax=ax,
+                pethline_kwargs=[{'color': colors['left-stim'], 'lw': 1},
+                                 {'color': colors['left-no-stim'], 'lw': 1},
+                                 {'color': colors['right-stim'], 'lw': 1},
+                                 {'color': colors['right-no-stim'], 'lw': 1}],
+                errbar_kwargs=[{'color': colors['left-stim'], 'alpha': 0.3, 'lw': 0},
+                               {'color': colors['left-no-stim'], 'alpha': 0.3, 'lw': 0},
+                               {'color': colors['right-stim'], 'alpha': 0.3, 'lw': 0},
+                               {'color': colors['right-no-stim'], 'alpha': 0.3, 'lw': 0}],
+                raster_kwargs=[{'color': colors['left-stim'], 'lw': 0.5},
+                               {'color': colors['left-no-stim'], 'lw': 0.5},
+                               {'color': colors['right-stim'], 'lw': 0.5},
+                               {'color': colors['right-no-stim'], 'lw': 0.5}],
+                eventline_kwargs={'lw': 0}, include_raster=False)
+            ax.set(ylabel='Firing rate (spikes/s)', xlabel='Time from trial start (s)',
+                   yticks=np.linspace(0, np.round(ax.get_ylim()[1]), 3), xticks=[-T_BEFORE, 0, T_AFTER])
+            if np.round(ax.get_ylim()[1]) % 2 == 0:
+                ax.yaxis.set_major_formatter(FormatStrFormatter('%.0f'))
+            else:
+                ax.yaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+            sns.despine(trim=False)
+            plt.tight_layout()
+            plt.savefig(
+                join(PATH, f'{region}_{pid}_neuron{neuron_id}.jpg'), dpi=300)
+            plt.close(p)
+        except:
+            continue

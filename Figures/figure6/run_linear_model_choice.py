@@ -19,8 +19,7 @@ one = init_one()
 _, save_path = paths()
 
 # Settings
-TIME_WIN = [0.2, 0.7]
-ONLY_SIG = False
+TIME_WIN = [-0.3, 0]
 
 # Load in neurons
 sig_neurons = pd.read_csv(join(save_path, 'light_modulated_neurons.csv'))
@@ -58,17 +57,14 @@ for i in rec.index.values:
 
     # Filter neurons that pass QC
     these_neurons = sig_neurons[sig_neurons['pid'] == pid]
-    if ONLY_SIG:
-        clusters_pass = these_neurons.loc[these_neurons['modulated'], 'neuron_id'].values
-    else:
-        clusters_pass = these_neurons['neuron_id'].values
+    clusters_pass = these_neurons['neuron_id'].values
     spikes.times = spikes.times[np.isin(spikes.clusters, clusters_pass)]
     spikes.clusters = spikes.clusters[np.isin(spikes.clusters, clusters_pass)]
     if len(spikes.clusters) == 0:
         continue
 
     # Get spike count array
-    stim_intervals = np.column_stack(((trials_df['stimOn_times'] + TIME_WIN[0]), (trials_df['stimOn_times'] + TIME_WIN[1])))
+    stim_intervals = np.column_stack(((trials_df['firstMovement_times'] + TIME_WIN[0]), (trials_df['firstMovement_times'] + TIME_WIN[1])))
     spike_counts, neuron_ids = get_spike_counts_in_bins(spikes.times, spikes.clusters, stim_intervals)
 
     # Loop over neurons
@@ -104,7 +100,4 @@ for i in rec.index.values:
         })), ignore_index=True)
 
     # Save results
-    if ONLY_SIG:
-        linear_df.to_csv(join(save_path, 'linear_model_results_sig.csv'), index=False)
-    else:
-        linear_df.to_csv(join(save_path, 'linear_model_results_2-7.csv'), index=False)
+    linear_df.to_csv(join(save_path, 'linear_model_results_to_choice.csv'), index=False)
