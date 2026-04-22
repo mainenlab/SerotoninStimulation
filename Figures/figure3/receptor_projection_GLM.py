@@ -39,7 +39,7 @@ fig_path = join(f_path, split(dirname(realpath(__file__)))[-1])
 
 # Load in expression
 expr_df = pd.read_csv(join(data_path, 'receptor_expression.csv'))
-expr_df = expr_df[~np.isin(expr_df['acronym'], ['MMme', 'CUL4, 5', 'CUL4, 5gr', 'CUL4, 5mo'])]
+expr_df = expr_df[~np.isin(expr_df['acronym'], ['MMme', 'CUL4, 5', 'CUL4, 5gr', 'CUL4, 5mo', 'CP'])]
 expr_df['region'] = remap(expr_df['acronym'])
 expr_df = expr_df[np.isin(expr_df['receptor'], INCL_RECEPTORS)]
 #expr_df['region'] = combine_regions(remap(expr_df['acronym']))
@@ -48,7 +48,7 @@ expression_mean = expr_df[['region', 'receptor', 'expression_energy']].groupby(
 
 # load structure and expression data set
 proj_df = pd.read_csv(join(data_path, 'dr_projection_strength.csv'))
-proj_df = proj_df[~np.isin(proj_df['allen_acronym'], ['MMd', 'MMme', 'MMl', 'MMm', 'MMp', 'CUL4, 5'])]
+proj_df = proj_df[~np.isin(proj_df['allen_acronym'], ['MMd', 'MMme', 'MMl', 'MMm', 'MMp', 'CUL4, 5', 'CP'])]
 proj_df['region'] = remap(proj_df['allen_acronym'])
 #proj_df['region'] = combine_regions(remap(proj_df['allen_acronym']))
 proj_summary = proj_df[['region', 'projection_density']].groupby(['region']).mean().reset_index()

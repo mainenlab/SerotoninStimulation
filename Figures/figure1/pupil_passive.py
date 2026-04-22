@@ -9,14 +9,20 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 import pandas as pd
+import os
 from scipy import stats
+from pathlib import Path
 from matplotlib.patches import Rectangle
 from stim_functions import figure_style, paths, add_significance
 from os.path import join, realpath, dirname, split
 
 # Get paths
 f_path, save_path = paths()
-fig_path = join(f_path, split(dirname(realpath(__file__)))[-1])
+try:
+    current_dir = Path(__file__).resolve().parent
+except NameError:
+    current_dir = Path(os.getcwd())
+fig_path = Path(f_path) / current_dir.name
 
 # Load in data
 pupil_df = pd.read_csv(join(save_path, 'pupil_passive.csv'))
@@ -52,3 +58,4 @@ add_significance(np.unique(pupil_df['time']), p_values, ax1)
 sns.despine(trim=True, bottom=True)
 plt.tight_layout()
 plt.savefig(join(fig_path, 'pupil_passive.pdf'))
+plt.show()

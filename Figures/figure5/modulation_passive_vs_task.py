@@ -8,6 +8,8 @@ By: Guido Meijer
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import os
+from pathlib import Path
 import matplotlib.pyplot as plt
 from os.path import join, realpath, dirname, split
 from scipy.stats import ttest_rel
@@ -20,7 +22,11 @@ MIN_REC = 2
 
 # Get paths
 f_path, save_path = paths()
-fig_path = join(f_path, split(dirname(realpath(__file__)))[-1])
+try:
+    current_dir = Path(__file__).resolve().parent
+except NameError:
+    current_dir = Path(os.getcwd())
+fig_path = Path(f_path) / current_dir.name
 colors, dpi = figure_style()
 
 # Load in modulation index over time
@@ -101,7 +107,8 @@ perc_mod = perc_mod.reset_index()
 perc_mod['color'] = [colors[i] for i in perc_mod['full_region']]
 
 # Do stats
-_, p = ttest_rel(perc_mod['task_mean'], perc_mod['passive_mean'])
+t, p = ttest_rel(perc_mod['task_mean'], perc_mod['passive_mean'])
+print(f't({perc_mod.shape[0]-1}) = {t:.3f}, p = {p:.3f}')
 
 # %%
 colors, dpi = figure_style()
@@ -123,7 +130,7 @@ ax1.legend(labels=perc_mod['full_region_name'], bbox_to_anchor=(1.05, 1.1))
 sns.despine(trim=True)
 plt.tight_layout()
 plt.savefig(join(fig_path, 'perc_mod_passive_vs_task.pdf'))
-
+plt.show()
 
 """
 

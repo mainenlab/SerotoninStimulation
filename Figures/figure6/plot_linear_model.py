@@ -10,8 +10,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+from statsmodels.stats.power import TTestPower
 from scipy.stats import ttest_1samp
-import pingouin as pg
 from pathlib import Path
 from stim_functions import paths, figure_style, remap, combine_regions, load_subjects
 colors, dpi = figure_style()
@@ -48,8 +48,13 @@ summary_df = linear_df.groupby(['subject'])[['coef_choice_abs', 'coef_stim_abs',
 # Statistics versus zero
 for var in ['coef_choice_abs', 'coef_stim_abs', 'coef_interaction']:
     t_stat, p_val = ttest_1samp(summary_df[var], 0)
-    bf = pg.bayesfactor_ttest(t_stat, nx=summary_df[var].shape[0])
-    print(f'{var}: t({len(summary_df)-1}) = {t_stat:.3f}, p = {p_val:.3f}, BF10 = {bf:.3f}')
+
+    power_analysis = TTestPower()
+    effect_size = summary_df[var].mean() / summary_df[var].std()
+    power = power_analysis.power(effect_size=effect_size, nobs=len(summary_df), alpha=0.05)
+    print(f'{var}: effect size = {effect_size:.3f}, power = {power:.3f}')
+
+    print(f'{var}: t({len(summary_df)-1}) = {t_stat:.3f}, p = {p_val:.3f}')
 
 summary_long_df = pd.melt(summary_df, id_vars=['subject'], value_vars=['coef_choice_abs', 'coef_stim_abs', 'coef_interaction'])
 props = {'boxprops':{'facecolor':'none', 'edgecolor':'none'}, 'medianprops':{'color':'none'},

@@ -11,6 +11,8 @@ import seaborn as sns
 import seaborn.objects as so
 from scipy.stats import pearsonr
 import matplotlib.pyplot as plt
+from pathlib import Path
+import os
 from os.path import join, realpath, dirname, split
 from matplotlib.colors import ListedColormap
 from stim_functions import paths, figure_style, load_subjects, combine_regions
@@ -20,7 +22,11 @@ MIN_NEURONS = 5
 
 # Get paths
 f_path, save_path = paths()
-fig_path = join(f_path, split(dirname(realpath(__file__)))[-1])
+try:
+    current_dir = Path(__file__).resolve().parent
+except NameError:
+    current_dir = Path(os.getcwd())
+fig_path = Path(f_path) / current_dir.name
 
 # Load in results
 mod_neurons = pd.read_csv(join(save_path, 'light_modulated_neurons.csv'))
@@ -121,6 +127,7 @@ plt.savefig(join(fig_path, 'modulation_latency_vs_index_latenzy.pdf'))
 
 use_neurons['mod_index_abs'] = np.abs(use_neurons['mod_index'])
 r, p = pearsonr(use_neurons['mod_index_abs'], use_neurons['latency'])
+print(f'r = {r:.3f}, p = {p:.3f}')
 
 slope, intercept = np.polyfit(use_neurons['mod_index_abs'], use_neurons['latency'], 1)
 x_fit = np.linspace(use_neurons['mod_index_abs'].min(), use_neurons['mod_index_abs'].max(), 100)
@@ -137,4 +144,4 @@ ax1.set(xlabel='Absolute modulation index', ylabel='Modulation latency (s)',
 plt.tight_layout()
 sns.despine(trim=True)
 plt.savefig(join(fig_path, 'modulation_latency_vs_absindex_latenzy.pdf'))
-
+plt.show()
