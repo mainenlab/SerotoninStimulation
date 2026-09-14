@@ -8,7 +8,7 @@ upstream moves.
 | What | Where | Committed? |
 |:--|:--|:--|
 | **Our analysis code and results** | `Reanalysis/` (this directory) | Yes — branch `reanalysis/5ht-subspace` |
-| **Our write-ups** | `mainenlab/5HT-talk`, in `results/` | Yes — in that repo |
+| **Our write-ups** | `mainenlab/5HT-programme`, in `results/` | Yes — in that repo |
 | **Upstream code and large data** | the rest of this clone | **No — leave upstream files alone** |
 
 ⚠️ **Corrected 2026-09-14.** The first two rows were wrong. Our code was never in HaaK, and
